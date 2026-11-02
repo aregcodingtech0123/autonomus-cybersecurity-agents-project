@@ -42,3 +42,13 @@ unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / docu
   Gitleaks/pip-audit/manifest/CLI do not).
 - Fix: SECURITY_POLICY corrected; audit dir/`raw/` 0700, raw files and manifest 0600 on POSIX; bytes untouched.
 - After: both pass. Unverified: any permission hardening on Windows (not implemented).
+
+### #5 Cleanup follows symlinks and leaves files behind - FIXED (option (a): host uid:gid on POSIX)
+- Tests: `tests/test_cleanup_and_user.py` (container-user unit tests; four `docker` tests in a Linux container with users 10001 and 1000).
+- Before: `AttributeError: ... no attribute 'container_user'` (x5), `AssertionError: victim file permissions were changed / '0o700' == '0o600'`,
+  `assert None == 'CleanupError'` (leftover `d` silently ignored), and `{'gone': False} != {'gone': True}` (read-only directory tree not removed:
+  second, unreported bug in the old cleanup).
+- Fix: `sandbox.container_user()` / `output_dir_mode()`; symlink-safe `remove_tree` + `CleanupError`; `_discard` for failure paths; orchestrator
+  raises loudly after the manifest; CLI exit 6. Output dirs are 0700 (0777 only for the root-host fallback).
+- After: `26 passed` (cleanup + docker integration). Justification for (a) is in docs/PHASE1_NOTES.md.
+- Unverified: real Linux/macOS hosts (no `--user <host uid>` run there); Windows semantics unchanged (fixed uid 10001).

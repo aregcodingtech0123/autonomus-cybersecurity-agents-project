@@ -25,6 +25,7 @@ from secaudit.core.sandbox import (
     NetworkPolicy,
     ResourceLimits,
     build_docker_command,
+    container_user,
     kill_container,
     run_container,
 )
@@ -116,7 +117,11 @@ def test_sandbox_properties_in_a_real_container(spec_factory, monkeypatch):
         assert p[forbidden].startswith("OSError"), f"{forbidden}: root filesystem must be read-only"
     assert p["write_tmp"] == "ok" and p["write_out"] == "ok"
     assert (spec_factory.out / "x").exists(), "the /out mount is the writable result channel"
-    assert p["uid"] == 10001 and p["gid"] == 10001, "must run as the non-root user"
+    expected_uid, expected_gid = (int(x) for x in container_user().split(":"))
+    assert expected_uid != 0, "the expected user is never root"
+    assert (p["uid"], p["gid"]) == (expected_uid, expected_gid), (
+        "must run as the selected non-root user"
+    )
     assert p["NoNewPrivs"] == "1"
     assert int(p["CapEff"], 16) == 0 and int(p["CapBnd"], 16) == 0, "all capabilities dropped"
     assert p["docker_sock"] is False
@@ -175,7 +180,7 @@ def test_docker_inspect_matches_expected_hostconfig(spec_factory):
         assert set(mounts) == {"/src", "/out"}
         assert mounts["/src"]["RW"] is False and mounts["/out"]["RW"] is True
         assert not any("docker.sock" in m["Source"] for m in info["Mounts"])
-        assert cfg["User"] == "10001:10001"
+        assert cfg["User"] == container_user()
         assert cfg["Labels"]["org.secaudit.managed"] == "true"
         assert [e for e in cfg["Env"] if e.startswith("HOME=")] == ["HOME=/tmp"]
     finally:

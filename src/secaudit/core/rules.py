@@ -27,6 +27,7 @@ from secaudit.core.sandbox import (
     Mount,
     NetworkPolicy,
     ResourceLimits,
+    output_dir_mode,
     run_container,
     subprocess_runner,
 )
@@ -123,7 +124,7 @@ def update_rules(
     snapshot = base / fetch_id
     snapshot.mkdir(parents=True, exist_ok=False)
     if os.name == "posix":
-        os.chmod(snapshot, 0o777)  # the container user is not the host user
+        os.chmod(snapshot, output_dir_mode())  # the container user is not the host user
     try:
         env = {"HOME": "/tmp"}
         fetch = run_container(
@@ -187,7 +188,7 @@ def _scratch_out(base: Path) -> Path:
     scratch = base / ".scratch"
     scratch.mkdir(exist_ok=True)
     if os.name == "posix":
-        os.chmod(scratch, 0o777)
+        os.chmod(scratch, output_dir_mode())
     return scratch
 
 

@@ -2,7 +2,8 @@
 
 Exit codes: 0 scan completed (findings do NOT change the code); 2 usage error or refused native
 run; 3 input rejected by intake; 4 one or more tools failed/timed out; 5 environment problem
-(Docker unreachable, image or rules missing); 1 unexpected error.
+(Docker unreachable, image or rules missing); 6 temporary files could not be removed;
+1 unexpected internal error.
 """
 
 from __future__ import annotations
@@ -17,13 +18,21 @@ from pathlib import Path
 
 from secaudit import __version__
 from secaudit.core import exe
-from secaudit.core.intake import DEFAULT_LIMITS, IntakeError
+from secaudit.core.intake import DEFAULT_LIMITS, CleanupError, IntakeError
 from secaudit.core.rules import DEFAULT_RULESETS, RulesError, update_rules
 from secaudit.core.sandbox import ResourceLimits, docker_available
 from secaudit.core.scan import ScanEnvironmentError, ScanOptions, run_scan
 from secaudit.core.scanners import TOOL_NAMES, SemgrepAdapter, build_adapters
 
-EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTAKE, EXIT_TOOLS, EXIT_ENV = 0, 1, 2, 3, 4, 5
+EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTAKE, EXIT_TOOLS, EXIT_ENV, EXIT_CLEANUP = (
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+)
 NATIVE_WARNING = (
     "WARNING: --runner native executes scanner tools directly on this machine with NO sandbox. "
     "Scanned content is untrusted; only use this for code you trust."
@@ -112,6 +121,9 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     except ScanEnvironmentError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ENV
+    except CleanupError as exc:
+        print(f"cleanup failed, delete these leftovers manually: {exc}", file=sys.stderr)
+        return EXIT_CLEANUP
     manifest = outcome.manifest
     print(f"audit {manifest['audit_id']} -> {outcome.audit_dir.as_posix()}")
     for name in manifest["tool_order"]:

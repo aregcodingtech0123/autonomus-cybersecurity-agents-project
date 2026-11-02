@@ -14,7 +14,7 @@ Each tool runs in its own short-lived container, built by `core/sandbox.py` as a
 | Cleanup, no implicit pulls | `--rm`, `--pull never` (images are built locally and pinned) |
 | Network | `--network none`; only pip-audit gets `--network bridge` (outbound only, nothing published) |
 | Filesystem | `--read-only` root, `--tmpfs /tmp:rw,noexec,nosuid,size=256m`, `--workdir /src` or `/tmp` |
-| Privileges | non-root `--user 10001:10001`, `--cap-drop ALL`, `--security-opt no-new-privileges` (default seccomp/AppArmor left on, never `unconfined`) |
+| Privileges | non-root `--user`: the host `uid:gid` on POSIX (root falls back to `10001:10001`), fixed `10001:10001` on Windows; `--cap-drop ALL`, `--security-opt no-new-privileges` (default seccomp/AppArmor left on, never `unconfined`) |
 | Resources | `--pids-limit 256`, `--memory 1g`, `--memory-swap 1g`, `--cpus 2` |
 | Mounts | source read-only at `/src`; Semgrep rules read-only at `/rules`; a **separate** per-tool writable `/out`. Nothing else |
 | Environment | explicit allow-list of names (`HOME`, `TMPDIR`, `LANG`, `XDG_CACHE_HOME`, `PYTHONDONTWRITEBYTECODE`, `SEMGREP_SEND_METRICS`, `SEMGREP_ENABLE_VERSION_CHECK`) with explicit values; no host passthrough |

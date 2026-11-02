@@ -36,7 +36,8 @@ uv run secaudit scan benchmarks/targets/vuln_python_app --out audits
 ```
 
 Exit codes: `0` scan completed (findings do not change it), `2` usage / refused native run,
-`3` input rejected, `4` a tool failed or timed out, `5` environment problem (Docker down, images or rules missing).
+`3` input rejected, `4` a tool failed or timed out, `5` environment problem (Docker down, images or rules missing),
+`6` temporary files could not be removed (leftovers are listed), `1` unexpected internal error.
 
 `--runner native` runs the tools on the host with **no isolation** and requires `--i-trust-this-code`.
 

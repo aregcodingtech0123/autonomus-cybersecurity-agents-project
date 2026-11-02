@@ -12,6 +12,7 @@ from secaudit.core.sandbox import (
     ResourceLimits,
     SandboxError,
     build_docker_command,
+    container_user,
     run_container,
     subprocess_runner,
 )
@@ -51,7 +52,8 @@ def test_every_mandatory_flag_is_present(spec):
     assert value_after(argv, "--network") == "none"
     assert value_after(argv, "--cap-drop") == "ALL"
     assert value_after(argv, "--security-opt") == "no-new-privileges"
-    assert value_after(argv, "--user") == "10001:10001"
+    user = value_after(argv, "--user")
+    assert user == container_user() and not user.startswith("0:"), "non-root --user is mandatory"
     assert value_after(argv, "--pids-limit") == "256"
     assert value_after(argv, "--memory") == "1g"
     assert value_after(argv, "--memory-swap") == "1g"

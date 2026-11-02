@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from secaudit.core.intake import IntakeError, Reason, remove_tree
+from secaudit.core.intake import CleanupError, IntakeError, Reason, remove_tree
 from secaudit.core.scanners.semgrep import SEMGREPIGNORE_BODY, SEMGREPIGNORE_NAME
 
 NEUTRALIZED_NAMES = frozenset({".bandit", ".gitleaksignore", ".gitleaks.toml", SEMGREPIGNORE_NAME})
@@ -59,8 +59,9 @@ def neutralize_workspace(workspace: Path) -> list[str]:
         policy.write_text(SEMGREPIGNORE_BODY, encoding="utf-8", newline="\n")
         if os.name == "posix":
             os.chmod(policy, 0o644)
-    except OSError as exc:
+    except (OSError, CleanupError) as exc:
         raise IntakeError(
-            Reason.IO_ERROR, f"could not neutralize scanner-policy files (errno {exc.errno})"
+            Reason.IO_ERROR,
+            f"could not neutralize scanner-policy files (errno {getattr(exc, 'errno', None)})",
         ) from None
     return sorted(removed)

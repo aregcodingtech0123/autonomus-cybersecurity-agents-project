@@ -179,6 +179,20 @@ published Docker image or repo, may conflict with the "no service / no distribut
 (own rules, a commercial agreement, or restricting to internal use) before Phase 7/8. Only the Semgrep engine
 and the rules in this registry were reviewed; other licenses (engine, Bandit, Gitleaks, pip-audit) were not.
 
+## Cleanup and container user (remediation of review #5)
+
+Decision: **option (a)**, run the container as the host `uid:gid` on POSIX. Why: the root cause was two different
+uids (host user, container user 10001) sharing bind mounts, which forced world-writable output directories and a
+host-side `chmod` fallback during cleanup. With (a) the output belongs to the host user, needs `0700` instead of
+`0777`, and cleanup needs no privileges. Option (b) (delete `/out` from inside another container) costs an extra
+container per tool and would still leave the host-side symlink-chmod bug. A root host user falls back to `10001`
+(the container is never root); Windows keeps `10001` because Docker Desktop bind mounts ignore uid.
+`remove_tree` never chmods a symlink, makes directories (not files) deletable, and raises `CleanupError` listing
+leftovers; the orchestrator raises it after writing the manifest and never masks an in-flight error. CLI exit code 6.
+A second bug was found on the way: the old cleanup chmod-ed the failing *file* instead of its read-only *parent
+directory*, so read-only trees were silently left behind (reproduced and fixed). Verified only in a Linux
+container simulating two users; behaviour on real Linux/macOS hosts is unverified.
+
 ## Known limitations
 
 - **Semgrep silently ignores files over 1,000,000 bytes** (`--max-target-bytes` default; confirmed in `--help`).

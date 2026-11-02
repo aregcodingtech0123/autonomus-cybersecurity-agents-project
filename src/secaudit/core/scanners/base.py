@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from secaudit.core.sandbox import NetworkPolicy
+from secaudit.core.sandbox import NetworkPolicy, output_dir_mode
 
 MAX_ARTIFACT_BYTES = 100 * 1024 * 1024
 STDERR_TAIL_CHARS = 2000
@@ -275,4 +275,4 @@ def make_output_dir(path: Path) -> None:
     """Create a per-tool output directory the unprivileged container user can write to."""
     path.mkdir(parents=True, exist_ok=True)
     if os.name == "posix":
-        os.chmod(path, 0o777)
+        os.chmod(path, output_dir_mode())

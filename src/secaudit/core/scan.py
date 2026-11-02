@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import uuid
 from dataclasses import dataclass, field
@@ -22,7 +23,14 @@ from secaudit.core.executors import (
     image_exists,
     list_managed_containers,
 )
-from secaudit.core.intake import DEFAULT_LIMITS, IntakeLimits, IntakeResult, intake, remove_tree
+from secaudit.core.intake import (
+    DEFAULT_LIMITS,
+    CleanupError,
+    IntakeLimits,
+    IntakeResult,
+    intake,
+    remove_tree,
+)
 from secaudit.core.neutralize import neutralize_workspace
 from secaudit.core.rules import RulesCache, RulesError, load_rules_cache
 from secaudit.core.sandbox import ResourceLimits, docker_available, kill_container
@@ -258,9 +266,18 @@ def run_scan(
         make_private(audit_dir / "manifest.json")
         return ScanOutcome(audit_dir, manifest, results)
     finally:
-        remove_tree(temp_root)
+        cleanup_error: CleanupError | None = None
+        try:
+            remove_tree(temp_root)
+        except CleanupError as exc:
+            cleanup_error = exc
         if executor.kind == "docker":
             _sweep_containers(f"secaudit-{short}-", options.docker)
+        if cleanup_error is not None:
+            in_flight = sys.exc_info()[1]
+            if in_flight is None:
+                raise cleanup_error  # the audit succeeded but left files behind: fail loudly
+            in_flight.add_note(f"cleanup also failed: {cleanup_error}")  # never mask the real error
 
 
 def _sweep_containers(name_prefix: str, docker: str) -> None:

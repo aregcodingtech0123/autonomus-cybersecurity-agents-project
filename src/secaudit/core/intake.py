@@ -17,6 +17,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 import unicodedata
@@ -134,21 +135,70 @@ def _looks_like_archive(head: bytes) -> bool:
     )
 
 
-def remove_tree(path: Path) -> None:
-    """Delete a directory tree, tolerating read-only files (Windows) and missing paths."""
+class CleanupError(RuntimeError):
+    """Something could not be deleted; the leftover paths are listed (cleanup must fail loudly)."""
 
-    def _onerror(func, p, _exc):  # noqa: ANN001
+
+def _chmod_for_delete(path: str) -> None:
+    """Make a directory (POSIX) or file (Windows read-only attribute) deletable. NEVER follows a
+    symlink: the review showed chmod-through-symlink changing a host file's permissions."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return
+    if stat.S_ISLNK(st.st_mode):
+        return
+    try:
+        if stat.S_ISDIR(st.st_mode) and os.name == "posix":
+            os.chmod(path, stat.S_IMODE(st.st_mode) | stat.S_IRWXU)
+        elif stat.S_ISREG(st.st_mode) and os.name == "nt":
+            os.chmod(path, stat.S_IMODE(st.st_mode) | stat.S_IWRITE)
+    except OSError:
+        pass  # not ours to change: the leftover check below reports it
+
+
+def remove_tree(path: Path) -> None:
+    """Delete a directory tree, tolerating read-only entries; raise CleanupError on leftovers.
+
+    Symlinks are removed, never followed or chmod-ed. A missing path is not an error.
+    """
+    path = Path(path)
+    if not os.path.lexists(path):
+        return
+    if path.is_symlink() or not path.is_dir():
+        path.unlink()
+        return
+    for root, dirs, files in os.walk(path, topdown=True, followlinks=False):
+        _chmod_for_delete(root)
+        for name in [*dirs, *files]:
+            _chmod_for_delete(os.path.join(root, name))
+
+    def record_and_retry(func, p, _exc):  # noqa: ANN001
+        _chmod_for_delete(os.path.dirname(p))
+        _chmod_for_delete(p)
         try:
-            os.chmod(p, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
             func(p)
         except OSError:
-            pass
+            pass  # still there: reported below
 
-    if path.exists() or path.is_symlink():
-        if path.is_symlink():
-            path.unlink()
-        else:
-            shutil.rmtree(path, onerror=_onerror)
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=record_and_retry)
+    else:  # pragma: no cover - the project supports 3.11
+        shutil.rmtree(path, onerror=record_and_retry)
+    if os.path.lexists(path):
+        left = []
+        for root, dirs, files in os.walk(path, followlinks=False):
+            left += [os.path.relpath(os.path.join(root, n), path) for n in [*dirs, *files]]
+        shown = ", ".join(sorted(left)[:10]) or "(top directory)"
+        raise CleanupError(f"could not remove {len(left) or 1} item(s) under {path}: {shown}")
+
+
+def _discard(path: Path, original: BaseException) -> None:
+    """Remove a half-built workspace on a failure path without hiding the original error."""
+    try:
+        remove_tree(path)
+    except CleanupError as cleanup:
+        raise cleanup from original
 
 
 def _is_link(path: str | os.PathLike[str]) -> bool:
@@ -303,8 +353,8 @@ def intake_directory(
     workspace = _make_workspace(workspace_parent)
     try:
         files, total, digest, skipped = _copy_tree(src, workspace, limits, include_git)
-    except BaseException:
-        remove_tree(workspace)
+    except BaseException as exc:
+        _discard(workspace, exc)
         raise
     return IntakeResult(workspace, "directory", digest, files, total, tuple(skipped))
 
@@ -371,8 +421,8 @@ def intake_zip(
     workspace = _make_workspace(workspace_parent)
     try:
         files, total = _extract_zip(archive, workspace, limits)
-    except BaseException:
-        remove_tree(workspace)
+    except BaseException as exc:
+        _discard(workspace, exc)
         raise
     return IntakeResult(workspace, "zip", input_sha, files, total)
 
@@ -639,9 +689,9 @@ def intake_git(
         remove_tree(clone_dir / ".git")  # history is never scanned or exposed
         workspace = _make_workspace(workspace_parent)
         files, total, _tree, skipped = _copy_tree(clone_dir, workspace, limits, include_git=False)
-    except BaseException:
+    except BaseException as exc:
         if workspace is not None:
-            remove_tree(workspace)
+            _discard(workspace, exc)
         raise
     finally:
         remove_tree(scratch)

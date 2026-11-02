@@ -14,6 +14,7 @@ Never produced: docker.sock mounts, --privileged, host networking/PID/IPC, env p
 from __future__ import annotations
 
 import enum
+import os
 import re
 import subprocess
 import threading
@@ -27,6 +28,34 @@ from typing import Protocol
 from secaudit.core import exe
 
 NON_ROOT_USER = "10001:10001"
+
+
+def container_user(
+    *, os_name: str | None = None, uid: int | None = None, gid: int | None = None
+) -> str:
+    """The `--user` value. Never root.
+
+    POSIX: the host uid:gid, so bind-mounted output belongs to the host user and cleanup needs no
+    privileges or chmod tricks (review #5, option (a)); a root host user falls back to 10001.
+    Windows (Docker Desktop): bind mounts ignore uid, so the fixed unprivileged 10001 is used.
+    """
+    if (os_name or os.name) != "posix":
+        return NON_ROOT_USER
+    uid = os.getuid() if uid is None else uid
+    gid = os.getgid() if gid is None else gid
+    if uid == 0:
+        return NON_ROOT_USER
+    return f"{uid}:{gid or uid}"
+
+
+def output_dir_mode(*, os_name: str | None = None, uid: int | None = None) -> int:
+    """0700 when the container runs as the host user; world-writable only for the root fallback."""
+    if (os_name or os.name) != "posix":
+        return 0o700
+    uid = os.getuid() if uid is None else uid
+    return 0o777 if uid == 0 else 0o700
+
+
 MANAGED_LABEL = "org.secaudit.managed=true"
 SRC_TARGET = "/src"
 RULES_TARGET = "/rules"
@@ -195,7 +224,7 @@ def build_docker_command(spec: ContainerSpec, docker: str = "docker") -> list[st
         "--tmpfs", f"/tmp:rw,noexec,nosuid,size={limits.tmpfs_size}",
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
-        "--user", NON_ROOT_USER,
+        "--user", container_user(),
         "--pids-limit", str(limits.pids),
         "--memory", limits.memory,
         "--memory-swap", limits.memory,

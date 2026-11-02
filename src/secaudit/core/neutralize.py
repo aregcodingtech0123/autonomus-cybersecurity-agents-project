@@ -11,7 +11,8 @@ tools that scan it. Which names matter was established EMPIRICALLY through the r
   * `.gitleaks.toml` (any depth)  not effective in the sandbox (we pass --config) but effective
                                   for the native runner, so it is removed as well
 
-Matching entries are deleted whether they are files or directories, at any depth, case-insensitively.
+Matching entries are deleted whether they are files or directories, at any depth,
+case-insensitively.
 The root `.semgrepignore` is then replaced with a neutral file: that is how Semgrep's built-in
 exclusion of `tests/` is switched off (it has no flag for it). Everything is done on the workspace
 COPY, never on the user's original input.

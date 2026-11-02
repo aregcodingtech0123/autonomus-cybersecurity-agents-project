@@ -33,7 +33,7 @@ from secaudit.core.scanners import (
     build_adapters,
     run_adapter,
 )
-from secaudit.core.scanners.base import Executor
+from secaudit.core.scanners.base import Executor, make_private
 from secaudit.core.scanners.semgrep import SEMGREPIGNORE_NAME
 
 MANIFEST_SCHEMA_VERSION = 1
@@ -208,6 +208,8 @@ def run_scan(
         audit_dir = options.out_root / audit_id
         raw_dir = audit_dir / "raw"
         raw_dir.mkdir(parents=True)
+        make_private(audit_dir)
+        make_private(raw_dir)
         work_dir = temp_root / "work"
         work_dir.mkdir()
 
@@ -253,6 +255,7 @@ def run_scan(
         (audit_dir / "manifest.json").write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n"
         )
+        make_private(audit_dir / "manifest.json")
         return ScanOutcome(audit_dir, manifest, results)
     finally:
         remove_tree(temp_root)

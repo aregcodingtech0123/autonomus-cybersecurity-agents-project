@@ -32,3 +32,13 @@ unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / docu
   directories, case-insensitive), replaces the root `.semgrepignore`, raises a typed `IntakeError(IO_ERROR)` on failure;
   manifest gains `neutralized_files`.
 - After: `28 passed` (every result count equals the baseline); unit suite `211 passed, 2 skipped`.
+
+### #4 "No raw secrets on disk" claim - FIXED (docs + permissions)
+- Tests: `test_secret_literals_appear_only_in_documented_raw_files` and `test_raw_files_are_byte_identical_to_what_the_manifest_hashes`
+  (docker, replace the Gitleaks-only test; also checks `manifest.json` and the CLI stdout/stderr), and
+  `tests/test_raw_output_secrecy.py::test_posix_audit_directory_and_raw_files_are_private` (runs the orchestrator in a Linux container).
+- Before: permissions test failed with `'0o755' == '0o700'`. The content test passed on unfixed code because the
+  claim was wrong in the docs, not in the code; it now pins the truth (Bandit output contains the literal secret,
+  Gitleaks/pip-audit/manifest/CLI do not).
+- Fix: SECURITY_POLICY corrected; audit dir/`raw/` 0700, raw files and manifest 0600 on POSIX; bytes untouched.
+- After: both pass. Unverified: any permission hardening on Windows (not implemented).

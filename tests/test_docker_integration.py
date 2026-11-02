@@ -279,15 +279,46 @@ def test_workspace_and_containers_are_cleaned_up(scan_outcome):
     )
 
 
-def test_gitleaks_output_contains_no_raw_secret(scan_outcome):
-    blob = (scan_outcome.audit_dir / "raw" / "gitleaks.sarif").read_text(encoding="utf-8")
-    for secret in (
-        "bench_n0" "VQRgmEuL",
-        "benc" "h_uoSN55OKIJ9XKt",
-        "bench_BvXX7C2JUsDNWW" "hy5PUSWscCmH1w2oxhud",
-    ):
-        assert secret not in blob
-    assert "REDACTED" in blob
+SECRET_LITERALS = (
+    "bench_n0" "VQRgmEuLNsKJ4a0ZkKpFxr11",
+    "not-a-real-password-benchmark-fake",
+    "placeholder-not-a-real-password",
+    "benc" "h_uoSN55OKIJ9XKt",
+    "bench_BvXX7C2JUsDNWW" "hy5PUSWscCmH1w2oxhud",
+)
+# Raw files that are DOCUMENTED to be secret-bearing (SECURITY_POLICY.md): Bandit embeds the
+# source line verbatim. Everything else, and every derived artifact, must be free of the literals.
+SECRET_BEARING_RAW = {"bandit.sarif", "semgrep.sarif"}
+
+
+def test_secret_literals_appear_only_in_documented_raw_files(scan_outcome):
+    audit = scan_outcome.audit_dir
+    found = {
+        p.name: {s for s in SECRET_LITERALS if s in p.read_text(encoding="utf-8")}
+        for p in sorted((audit / "raw").iterdir())
+    }
+    leaking = {name for name, hits in found.items() if hits}
+    assert leaking <= SECRET_BEARING_RAW, (
+        f"undocumented secret-bearing outputs: {leaking - SECRET_BEARING_RAW}"
+    )
+    assert found["gitleaks.sarif"] == set() and "REDACTED" in (
+        audit / "raw" / "gitleaks.sarif"
+    ).read_text(encoding="utf-8")
+    assert found["pip-audit.json"] == set()
+    # The documented truth, pinned so a change in Bandit's behaviour is noticed:
+    assert "not-a-real-password-benchmark-fake" in found["bandit.sarif"]
+    manifest_text = (audit / "manifest.json").read_text(encoding="utf-8")
+    assert not [s for s in SECRET_LITERALS if s in manifest_text], (
+        "the manifest must be secret-free"
+    )
+
+
+def test_raw_files_are_byte_identical_to_what_the_manifest_hashes(scan_outcome):
+    import hashlib
+
+    for tool, entry in scan_outcome.manifest["tools"].items():
+        data = (scan_outcome.audit_dir / entry["artifact"]).read_bytes()
+        assert hashlib.sha256(data).hexdigest() == entry["artifact_sha256"], tool
 
 
 def test_semgrep_scanned_the_tests_directory(scan_outcome):
@@ -366,7 +397,11 @@ def test_cli_scan_end_to_end_exit_code_and_layout(tmp_path, rules_cache, capsys)
     manifest = json.loads((audit / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["tool_order"] == ["bandit", "gitleaks"]
     assert os.path.isfile(audit / "raw" / "bandit.sarif")
-    assert "bandit" in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert "bandit" in captured.out
+    assert not [s for s in SECRET_LITERALS if s in captured.out + captured.err], (
+        "CLI summary leaks a secret"
+    )
 
 
 def test_zip_input_round_trips_through_the_sandbox(tmp_path, rules_cache):

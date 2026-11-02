@@ -28,6 +28,7 @@ Check an item only when it is done and verified. Work found tempting out of phas
 - [ ] SQLite persistence (SQLModel/SQLAlchemy)
 - [ ] JSON and HTML report
 - [ ] Tool-only baseline metrics (compare against 9/11 positives detected, 4/7 negatives falsely flagged)
+- [ ] Mask secrets in all derived data (raw Bandit/Semgrep outputs are secret-bearing; masking is Phase 2 work)
 - [ ] Model scanner coverage (files actually analyzed/skipped; Semgrep ignores files over 1 MB silently)
 - [ ] Map pip-audit findings to requirement lines via `manifest.json` `pinned_requirements`
 

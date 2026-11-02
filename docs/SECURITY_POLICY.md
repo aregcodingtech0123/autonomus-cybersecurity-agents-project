@@ -74,8 +74,16 @@ Every rejection raises `IntakeError` with a stable reason code. Defaults (all co
 - **Authorized targets only.** The user must confirm authorization for each audit; no scanning of third-party
   systems. Live-system features (Phase 9+) are passive only.
 - Patches are proposals; nothing is written to the user's repository automatically.
-- Audit output is local (`./audits/<audit_id>/`), contains no host paths and no raw secrets (Gitleaks is redacted),
-  and the temporary workspace is deleted after every run, including failures and timeouts.
+- Audit output is local (`./audits/<audit_id>/`). **Raw scanner outputs are SECRET-BEARING.** Only Gitleaks redacts
+  (`--redact`); Bandit embeds the offending source line verbatim (and Semgrep may), so `raw/bandit.sarif` contains
+  hardcoded passwords and keys found in the scanned code (verified: `tests/test_docker_integration.py::
+  test_secret_literals_appear_only_in_documented_raw_files`). Treat the whole audit directory as sensitive.
+  On POSIX the audit directory and `raw/` are created `0700` and raw files and `manifest.json` `0600`
+  (permissions only; raw bytes stay byte-identical so the manifest SHA-256 remains valid). On Windows no
+  permission hardening is applied (no portable stdlib equivalent; **unverified/not done**).
+  Only `manifest.json` and CLI summaries are guaranteed secret-free (no host paths, no secret values).
+  Masking of any *derived* data (findings, evidence snippets, anything shown to an LLM) happens in Phase 2.
+- The temporary workspace is deleted after every run, including failures and timeouts.
 - `--runner native` has no isolation: it refuses to run without `--i-trust-this-code` and prints a warning.
 - Fetched Semgrep rules are never committed to the repository (license; see `docs/PHASE1_NOTES.md`).
 

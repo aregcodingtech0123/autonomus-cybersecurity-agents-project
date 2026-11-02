@@ -231,6 +231,7 @@ def run_adapter(
     raw_dir.mkdir(parents=True, exist_ok=True)
     destination = raw_dir / adapter.output_filename
     shutil.copyfile(source, destination)
+    make_private(destination)
     return result(
         "completed",
         raw_artifact_path=destination,
@@ -258,6 +259,16 @@ def _probe_version(
     if outcome.exit_code != 0 or outcome.timed_out:
         return None
     return adapter.parse_version(outcome.stdout + "\n" + outcome.stderr)
+
+
+def make_private(path: Path) -> None:
+    """Owner-only permissions (0700 dir / 0600 file) on POSIX; chmod only, bytes untouched.
+
+    Raw scanner outputs are SECRET-BEARING (Bandit embeds source lines verbatim). Windows has no
+    stdlib equivalent, so nothing is applied there (documented, not faked).
+    """
+    if os.name == "posix":
+        os.chmod(path, 0o700 if path.is_dir() else 0o600)
 
 
 def make_output_dir(path: Path) -> None:

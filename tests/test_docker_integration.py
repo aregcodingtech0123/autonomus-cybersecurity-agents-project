@@ -130,19 +130,6 @@ def test_sandbox_properties_in_a_real_container(spec_factory, monkeypatch):
     assert p["rootfs_mount"].split()[3].split(",")[0] == "ro"
 
 
-def test_egress_policy_really_allows_outbound_only_when_declared(spec_factory):
-    probe = (
-        "import socket,sys; s=socket.socket(); s.settimeout(8); "
-        "s.connect(('pypi.org', 443)); print('connected')"
-    )
-    blocked = run_container(spec_factory(["python", "-c", probe], label="net0"))
-    assert blocked.exit_code != 0 and "connected" not in blocked.stdout
-    allowed = run_container(
-        spec_factory(["python", "-c", probe], network=NetworkPolicy.EGRESS_ONLY, label="net1")
-    )
-    assert allowed.exit_code == 0 and "connected" in allowed.stdout, allowed.stderr[-300:]
-
-
 def test_docker_inspect_matches_expected_hostconfig(spec_factory):
     spec = spec_factory(["python", "-c", "import time; time.sleep(120)"], label="inspect")
     argv = build_docker_command(spec)

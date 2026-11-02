@@ -101,6 +101,12 @@ class PipAuditAdapter(ScannerAdapter):
     version = "2.10.1"
     output_filename = "pip-audit.json"
     artifact_kind = "json"
+    limitations = (
+        "Audits exact pins only (name==version). Unpinned, URL, editable and -r/-c lines are "
+        "listed under 'unresolved' and are not audited; transitive dependencies are not resolved.",
+        "Environment markers, extras and hashes are dropped before auditing; results depend on "
+        "the vulnerability service on the scan date.",
+    )
     network_policy = NetworkPolicy.EGRESS_ONLY  # reaches the vulnerability service
     workdir = "/tmp"
 

@@ -8,6 +8,14 @@ class GitleaksAdapter(ScannerAdapter):
     version = "8.30.1"
     output_filename = "gitleaks.sarif"
     artifact_kind = "sarif"
+    limitations = (
+        "Gitleaks' built-in default config has a path allowlist: secrets under node_modules/, "
+        "in lock files (go.sum, package-lock.json, poetry.lock), and in .svg and .pdf files "
+        "were NOT reported (verified in the Phase 1 review, 2026-11-03). The config was "
+        "deliberately not rewritten in Phase 1.",
+        "Binary files are not scanned (verified 2026-11-03).",
+        "Working tree only: git history is never scanned (.git is excluded from the workspace).",
+    )
 
     def version_command(self) -> list[str]:
         return ["gitleaks", "version"]

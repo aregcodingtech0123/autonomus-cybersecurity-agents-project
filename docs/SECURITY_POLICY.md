@@ -106,3 +106,31 @@ Every rejection raises `IntakeError` with a stable reason code. Defaults (all co
 `benchmarks/targets/` is intentionally vulnerable. It is never deployed, never imported by `secaudit`, and excluded
 from lint, format, test collection and self-scanning. Only fake or vendor-documented example credentials may appear
 there. (It *is* scanned on purpose by the benchmark, inside the sandbox.)
+
+## 6. Known residual risks (declared, not fixed)
+
+- **Egress network reaches the Docker host side (review #9).** The only container with network access (pip-audit, and the
+  Semgrep rules fetch) uses Docker's default bridge. Measured on Docker Desktop 2026-11-03: it can reach `host.docker.internal`
+  (192.168.65.254), the bridge gateway (172.17.0.1) and the link-local address 169.254.169.254 (TCP connect answers
+  `refused`, i.e. the address is routed); 192.168.65.1 timed out. Mitigations were TRIED and none closes it:
+
+  | Variant | Internal *names* | Internal *IPs* | Internet |
+  |---|---|---|---|
+  | default bridge (current) | resolve | reachable | open |
+  | `--add-host host.docker.internal:127.0.0.1` ... | point to loopback | **still reachable** | open |
+  | `--dns 1.1.1.1` | do not resolve | **still reachable** | open |
+  | user-defined bridge network | resolve | **still reachable** | open |
+
+  Only name resolution changes, which a malicious tool does not need; `--dns` also adds a third-party DNS dependency.
+  No flag was added because none gives a boundary. Exposure is limited because the pip-audit container receives only
+  package names and versions, never source, and runs with all other restrictions. A real boundary needs an egress
+  allow-list proxy and blocking of private/link-local ranges on the host (ROADMAP, Phase 8, Linux deployment).
+  Pinned by `tests/test_limitations_and_egress.py::test_KNOWN_RESIDUAL_RISK_egress_network_can_reach_the_docker_host_side`.
+- **Gitleaks default path allowlist (review #10).** The baked config uses `useDefault = true`, which keeps Gitleaks' built-in
+  path allowlist: a secret under `node_modules/`, in lock files (`go.sum`, `package-lock.json`, `poetry.lock`), or in `.svg` /
+  `.pdf` files is NOT reported; binary files are not scanned either (verified). Declared in the manifest as
+  `limitations` for every tool so Phase 2's coverage model can surface it. The config was deliberately not rewritten in Phase 1.
+- **Scanner coverage is partly invisible.** Bandit silently omits files it cannot parse and Semgrep silently skips files over
+  1,000,000 bytes (both verified); see each tool's `limitations` in `manifest.json`.
+- **Check-to-open race on intake (review #12).** `lstat` identity is compared with the opened descriptor, but Windows has no
+  `O_NOFOLLOW` and still follows parent junctions; a concurrent local attacker is out of scope.

@@ -142,6 +142,7 @@ def build_manifest(
             "pinned_requirements",
             "unresolved",
             "version_check",
+            "limitations",
         ):
             if key in extra:
                 entry[{"rules": "ruleset_info"}.get(key, key)] = extra[key]
@@ -249,6 +250,7 @@ def run_scan(
                         status="failed",
                         detail=f"unexpected error: {type(exc).__name__}",
                         network=adapter.network_policy.value,
+                        extra={"limitations": list(adapter.limitations)},
                     )
                 )
         manifest = build_manifest(

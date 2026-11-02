@@ -96,3 +96,17 @@ unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / docu
 - After: `27 passed` for the two files; full suite `329 passed, 2 skipped`, 0 labelled containers left. Killed-parent evidence: the orphan
   survives `Popen.kill()` of its parent (precondition asserted), is removed by the reaper, and a separate orphan exits on its own within 60 s.
 - Not covered: the 24 h age cap and the Windows `OpenProcess` access-denied branch are reasoned, not exercised.
+
+### #9 Egress network reaches the Docker host side - DOCUMENTED (no mitigation could be demonstrated)
+- Experiment (container probing TCP reachability, `scratchpad/review/egress_probe.py`): default bridge, `--add-host` overrides, `--dns 1.1.1.1`
+  and a user-defined bridge all left `192.168.65.254:2375` and `169.254.169.254:80` answering `refused(host answered)`; only name resolution varied.
+  No flag was added. Table and reasoning in SECURITY_POLICY section 6; ROADMAP Phase 8 item added.
+- Tests: `test_internet_is_reachable_only_for_adapters_that_declare_egress` (the renamed overclaiming test; it proves only internet reachability) and
+  `test_KNOWN_RESIDUAL_RISK_egress_network_can_reach_the_docker_host_side` (Docker Desktop only; pins the residual exposure so a change is noticed).
+- Unverified: Linux hosts (Docker's bridge gateway there is the host itself; not measured) and any cloud metadata behaviour beyond the TCP answer seen here.
+
+### #10 Gitleaks default path allowlist - DOCUMENTED + surfaced in the manifest
+- Test: `tests/test_limitations_and_egress.py::test_manifest_declares_per_tool_limitations` (+ skipped-tool variant).
+  Before: `2 failed` (`KeyError: 'limitations'`). After: `4 passed` in the file.
+- Verified while at it (`coverage_probe.py`): Bandit omits an unparsable file with no notice; Semgrep skips a >1 MB file with no notice but reports
+  parse errors as notifications; Gitleaks skips binary files. All four adapters now declare `limitations`, copied into every tool's manifest entry.

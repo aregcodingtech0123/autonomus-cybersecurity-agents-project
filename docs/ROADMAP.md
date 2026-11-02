@@ -63,6 +63,7 @@ Check an item only when it is done and verified. Work found tempting out of phas
 - [ ] SARIF export
 - [ ] Docker Compose
 - [ ] README with metrics, demo
+- [ ] Egress allow-list proxy and private/link-local blocking for Linux deployment (closes the declared residual risk in SECURITY_POLICY section 6)
 
 ## Phase 9 - Live audit (passive only)
 - [ ] Passive live-system checks, explicit authorization required

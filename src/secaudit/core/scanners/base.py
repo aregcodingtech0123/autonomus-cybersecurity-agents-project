@@ -109,6 +109,8 @@ class ScannerAdapter:
     output_filename: str
     artifact_kind: str  # "sarif" | "json"
     completed_exit_codes: frozenset[int] = frozenset({0, 1})
+    # Known coverage gaps, copied into manifest.json so Phase 2's coverage model can surface them.
+    limitations: tuple[str, ...] = ()
     network_policy: NetworkPolicy = NetworkPolicy.NONE
     workdir: str = "/src"
     env: dict[str, str] = {"HOME": "/tmp"}  # noqa: RUF012 - read-only class constant
@@ -167,6 +169,7 @@ def run_adapter(
     from secaudit.core.sandbox import SandboxError  # local: keeps imports light for adapters
 
     def result(status: str, detail: str = "", **kw) -> RawScanResult:
+        extra = {"limitations": list(adapter.limitations), **kw.pop("extra", {})}
         return RawScanResult(
             tool=adapter.name,
             version=kw.pop("version", adapter.version),
@@ -178,6 +181,7 @@ def run_adapter(
             status=status,
             detail=detail,
             network=adapter.network_policy.value,
+            extra=extra,
             **kw,
         )
 

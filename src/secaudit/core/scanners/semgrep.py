@@ -22,6 +22,13 @@ class SemgrepAdapter(ScannerAdapter):
     version = "1.183.0"
     output_filename = "semgrep.sarif"
     artifact_kind = "sarif"
+    limitations = (
+        "Files larger than 1,000,000 bytes (--max-target-bytes default) are skipped without "
+        "any notification in the SARIF (verified 2026-11-03); parse errors, in contrast, are "
+        "reported as notifications.",
+        "Results depend on the pinned rules snapshot (names + SHA-256 in ruleset_info); "
+        "coverage is only as broad as those rulesets.",
+    )
     env = {"HOME": "/tmp", "SEMGREP_SEND_METRICS": "off", "SEMGREP_ENABLE_VERSION_CHECK": "0"}  # noqa: RUF012
 
     def __init__(self, rules: RulesCache | None) -> None:

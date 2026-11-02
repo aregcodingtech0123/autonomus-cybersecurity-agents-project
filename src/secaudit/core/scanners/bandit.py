@@ -8,6 +8,11 @@ class BanditAdapter(ScannerAdapter):
     version = "1.9.4"
     output_filename = "bandit.sarif"
     artifact_kind = "sarif"
+    limitations = (
+        "Files Bandit cannot parse (e.g. syntax errors) are silently omitted: neither the "
+        "SARIF nor a notification lists them (verified 2026-11-03).",
+        "Only Python source is analysed; no coverage report is produced.",
+    )
 
     def build_command(self, paths: ToolPaths) -> list[str]:
         return [

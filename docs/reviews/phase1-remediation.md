@@ -52,3 +52,25 @@ unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / docu
   raises loudly after the manifest; CLI exit 6. Output dirs are 0700 (0777 only for the root-host fallback).
 - After: `26 passed` (cleanup + docker integration). Justification for (a) is in docs/PHASE1_NOTES.md.
 - Unverified: real Linux/macOS hosts (no `--user <host uid>` run there); Windows semantics unchanged (fixed uid 10001).
+
+### #6 Hardlinks, #7 untyped errors/hostile names, #11 reserved names, #12 TOCTOU - FIXED
+- Tests: `tests/test_intake_hardening.py` (hardlinks incl. a Linux-container case, six Windows-invalid characters, 300-byte component,
+  237-char MAX_PATH entry, total path-length rule, ANY OSError during zip/dir copy -> typed), `tests/test_intake_names_toctou.py`
+  (all six review variants plus eight more reserved names, look-alikes that must still be accepted, a deterministic lstat->open race).
+- Before (unfixed code): `27 failed, 12 passed` (AttributeError for `Reason.HARDLINK`/`CHANGED_DURING_INTAKE`/`IO_ERROR`; the six
+  invalid characters, the long path and every OSError case were not typed; reserved variants like `CONIN$`, `COM1`+superscript were accepted).
+- Fix: `Reason.HARDLINK` (reject, never skip: two hardlinked repo files would otherwise be silently hidden), `IO_ERROR`, `CHANGED_DURING_INTAKE`;
+  `_io_guard` converts any OSError (errno only, no paths); `<>"|?*` and >255-byte components rejected; total path length checked before
+  anything is written (Windows 259, POSIX 4095); NFKC-normalised reserved-name check incl. `CONIN$`/`CONOUT$`/`COM0-9`/`LPT0-9`;
+  `os.lstat` identity (`st_dev`, `st_ino`) compared with `fstat` of the opened descriptor.
+- After: `39 passed`. TOCTOU residual (documented, unverified to be exploitable): Windows has no `O_NOFOLLOW` and still follows parent
+  junctions; the identity check narrows but cannot close that window. A concurrent local attacker is out of scope for the container sandbox.
+- Directory-named `.semgrepignore` aborting every tool (#7) was fixed in T2 (`neutralize_workspace`) and is covered there.
+
+### #7 CLI tracebacks and host paths - FIXED
+- Tests: `tests/test_cli_errors.py` (10 cases).
+- Before: `5 failed, 5 passed` (an unexpected exception escaped `main()` as a raw traceback).
+- Fix: catch-all prints ONE line with the exception type only, writes the traceback to `.secaudit/logs/secaudit-*.log`
+  (`SECAUDIT_LOG_DIR` overrides), `--debug` (before or after the subcommand) prints it. Input-caused failures stay typed (exit 3);
+  an internal bug exits 1. Deviation: the task text asked for exit code 3 for everything; reporting a bug as "input rejected" would mislead.
+- After: `10 passed`; full non-docker suite `266 passed, 2 skipped`.

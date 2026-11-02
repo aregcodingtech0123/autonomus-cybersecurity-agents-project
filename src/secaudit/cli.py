@@ -12,8 +12,10 @@ import argparse
 import os
 import subprocess
 import sys
+import traceback
 from collections.abc import Sequence
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 from secaudit import __version__
@@ -39,6 +41,35 @@ NATIVE_WARNING = (
 )
 
 
+def log_directory() -> Path:
+    """Where tracebacks of unexpected errors are written (git-ignored state directory)."""
+    return Path(os.environ.get("SECAUDIT_LOG_DIR") or Path(".secaudit") / "logs")
+
+
+def _internal_error(exc: BaseException, debug: bool) -> int:
+    """Print one sanitized line (type only; messages can hold host paths) and log the traceback."""
+    trace = "".join(traceback.format_exception(exc))
+    shown = "the log could not be written"
+    try:
+        directory = log_directory()
+        directory.mkdir(parents=True, exist_ok=True)
+        log = directory / f"secaudit-{datetime.now(UTC):%Y%m%dT%H%M%S%fZ}.log"
+        log.write_text(trace, encoding="utf-8", newline="\n")
+        # Only a relative directory is shown: an absolute one would put host paths on the terminal.
+        where = "" if directory.is_absolute() else f" in {directory.as_posix()}"
+        shown = f"details in {log.name}{where}"
+    except OSError:
+        pass
+    print(
+        f"error: internal error ({type(exc).__name__}); {shown}. "
+        "Re-run with --debug to print the traceback.",
+        file=sys.stderr,
+    )
+    if debug:
+        print(trace, file=sys.stderr)
+    return EXIT_ERROR
+
+
 def _tool_list(value: str) -> tuple[str, ...]:
     names = tuple(v.strip() for v in value.split(",") if v.strip())
     unknown = [n for n in names if n not in TOOL_NAMES]
@@ -50,9 +81,21 @@ def _tool_list(value: str) -> tuple[str, ...]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="secaudit", description="Multi-agent security audit.")
     parser.add_argument("--version", action="version", version=f"secaudit {__version__}")
+    parser.add_argument(
+        "--debug", action="store_true", help="print tracebacks of unexpected errors"
+    )
     sub = parser.add_subparsers(dest="command")
+    # Accept --debug after the subcommand too, without overriding a value given before it.
+    debug_parent = argparse.ArgumentParser(add_help=False)
+    debug_parent.add_argument(
+        "--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS
+    )
 
-    scan = sub.add_parser("scan", help="run the scanners against a directory, ZIP or https Git URL")
+    scan = sub.add_parser(
+        "scan",
+        parents=[debug_parent],
+        help="run the scanners against a directory, ZIP or https Git URL",
+    )
     scan.add_argument("input", help="directory, .zip file, or https:// Git URL")
     scan.add_argument("--tools", type=_tool_list, default=TOOL_NAMES, metavar="LIST",
                       help=f"comma-separated subset of: {','.join(TOOL_NAMES)}")  # fmt: skip
@@ -69,13 +112,15 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--timeout", type=float, default=ResourceLimits().timeout_s,
                       help="per-tool wall-clock timeout in seconds")  # fmt: skip
 
-    build = sub.add_parser("build-images", help="build the pinned scanner Docker images")
+    build = sub.add_parser(
+        "build-images", parents=[debug_parent], help="build the pinned scanner Docker images"
+    )
     build.add_argument("--tools", type=_tool_list, default=TOOL_NAMES, metavar="LIST")
     build.add_argument(
         "--docker-dir", type=Path, default=Path(__file__).resolve().parents[2] / "docker"
     )
 
-    rules = sub.add_parser("rules", help="manage the Semgrep rules cache")
+    rules = sub.add_parser("rules", parents=[debug_parent], help="manage the Semgrep rules cache")
     rules_sub = rules.add_subparsers(dest="rules_command", required=True)
     update = rules_sub.add_parser("update", help="download rulesets (network on, no code present)")
     update.add_argument("--rules-dir", type=Path, default=None)
@@ -204,6 +249,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("interrupted", file=sys.stderr)
         return EXIT_ERROR
+    except Exception as exc:  # noqa: BLE001 - last line of defence: no traceback, no host paths
+        return _internal_error(exc, bool(getattr(args, "debug", False)))
     parser.print_help()
     return EXIT_USAGE
 

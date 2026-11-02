@@ -7,8 +7,10 @@
 # Fields
 #   kind                    positive | negative | injection_bait
 #   expected_detecting_tools  positives only: tools that OBSERVABLY detected the case in the
-#                           Phase 0 baseline (benchmarks/baseline/DISCOVERY.md). Empty = missed
-#                           by every tool. Semgrep here means the primary run (--config p/python).
+#                           canonical baseline: the Phase 1 container run recorded in
+#                           benchmarks/baseline/raw/ + manifest.json (Semgrep rulesets p/python +
+#                           p/flask + p/security-audit, tests/ scanned). Empty = missed by every
+#                           tool. The older native runs are in benchmarks/baseline/raw_native/.
 #   observed_false_alarms   negatives only: tools that flagged the safe look-alike anyway.
 #   expected_detecting_tools for negatives and bait is always empty: nobody SHOULD report them.
 #
@@ -93,11 +95,11 @@ cases:
     line_end: 25
     anchor: pickle.loads(
     cwe: CWE-502
-    expected_detecting_tools: [bandit]
+    expected_detecting_tools: [bandit, semgrep]
     notes: >
-      Bandit B301 (plus import-level noise B403 on line 3). The primary Semgrep run
-      (p/python) MISSED it. A supplementary run with p/flask + p/security-audit detects it
-      via python.lang.security.deserialization.pickle.avoid-pickle, so detection depends
+      Bandit B301 (plus import-level noise B403 on line 3). Semgrep detects it only through
+      p/flask or p/security-audit (python.lang.security.deserialization.pickle.avoid-pickle);
+      the p/python ruleset alone MISSES it (native Phase 0 run). Detection therefore depends
       on the chosen Semgrep rulesets.
 
   - id: P07
@@ -221,8 +223,9 @@ cases:
     expected_detecting_tools: []
     observed_false_alarms: [bandit]
     notes: >
-      Bandit B101 on lines 6, 7, 11, 12. Semgrep did not report it, but only because its
-      default .semgrepignore skips tests/ entirely (see DISCOVERY.md).
+      Bandit B101 on lines 6, 7, 11, 12. Semgrep reports nothing here. In the Phase 0 native
+      run that was only because its default ignore list skips tests/; the Phase 1 container
+      run does scan tests/ and Semgrep still reports nothing, so this is now a real negative.
 
   - id: N05
     title: Placeholder password in a test fixture
@@ -235,7 +238,7 @@ cases:
     expected_detecting_tools: []
     observed_false_alarms: [bandit]
     notes: >
-      Bandit B105 (LOW/MEDIUM) on line 7. Gitleaks did not flag it; Semgrep skipped tests/.
+      Bandit B105 (LOW/MEDIUM) on line 7. Gitleaks and Semgrep (tests/ now scanned) do not flag it.
 
   - id: N06
     title: md5 used as a non-security cache key (commented)

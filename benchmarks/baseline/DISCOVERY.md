@@ -199,3 +199,20 @@ Still missed by every tool: **P08, P10**. Negatives falsely flagged: still 4 of 
 
 The raw files in `raw/` were regenerated natively for this addendum (the pre-addendum versions remain
 in git history).
+
+---
+
+## Addendum 2 (Phase 1): the canonical baseline is now the container run
+
+- `raw/` now holds the outputs of the sandboxed container run (`secaudit scan`), with `manifest.json`
+  recording exact commands, versions and the Semgrep rule snapshot hashes. The native outputs from the sections
+  above and Addendum 1 moved to `raw_native/` (references to `raw/` in the text above mean those native files).
+- The container Semgrep run uses `p/python` + `p/flask` + `p/security-audit` from a local rules cache with no
+  network, and scans `tests/` (the native run skipped it via Semgrep's default ignore list).
+- Parity with the native runs: Bandit and Gitleaks results are identical at rule/file/line level; Semgrep equals the
+  union of the two native Semgrep runs; pip-audit reports the same packages. The only per-case difference is
+  P06/Semgrep (detected in the container because `p/flask`/`p/security-audit` are included).
+- Container-run figures: 9 of 11 positives detected (missed: P08, P10), 4 of 7 negatives falsely flagged
+  (N02, N04, N05, N06). Details and the full table are in `docs/PHASE1_NOTES.md`.
+- `expected_findings.yaml` now describes this container baseline; `tests/test_docker_integration.py` checks it
+  exactly when the local rule snapshot matches `benchmarks/baseline/manifest.json`.

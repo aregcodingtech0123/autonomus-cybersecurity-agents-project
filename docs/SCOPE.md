@@ -30,8 +30,9 @@ Real security tools find issues. LLM agents only triage, assess risk and propose
 ## Success metrics
 
 Measured against `benchmarks/expected_findings.yaml` and compared with the tool-only baseline
-(Phase 0: 7 of 10 positives detected, 4 of 6 negatives falsely flagged; see
-`benchmarks/baseline/DISCOVERY.md`).
+(Phase 1 container baseline: 9 of 11 positives detected, 4 of 7 negatives falsely flagged; see
+`docs/PHASE1_NOTES.md` and `benchmarks/baseline/DISCOVERY.md`). The Phase 0 figure of 7 of 10 was
+computed with a flawed P03 case and is superseded.
 
 | Metric | Definition |
 |---|---|

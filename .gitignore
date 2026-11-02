@@ -26,3 +26,7 @@ Thumbs.db
 .idea/
 .vscode/
 .claude/
+
+# secaudit runtime state (never commit fetched rules or audit output)
+.secaudit/
+audits/

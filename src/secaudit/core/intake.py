@@ -58,6 +58,7 @@ class Reason(enum.StrEnum):
     FILE_SIZE_EXCEEDED = "file_size_exceeded"
     COMPRESSION_RATIO_EXCEEDED = "compression_ratio_exceeded"
     SIZE_MISMATCH = "size_mismatch"
+    IO_ERROR = "io_error"
     GIT_URL_SCHEME = "git_url_scheme"
     GIT_URL_INVALID = "git_url_invalid"
     GIT_HOST_NOT_ALLOWED = "git_host_not_allowed"

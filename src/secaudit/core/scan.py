@@ -23,6 +23,7 @@ from secaudit.core.executors import (
     list_managed_containers,
 )
 from secaudit.core.intake import DEFAULT_LIMITS, IntakeLimits, IntakeResult, intake, remove_tree
+from secaudit.core.neutralize import neutralize_workspace
 from secaudit.core.rules import RulesCache, RulesError, load_rules_cache
 from secaudit.core.sandbox import ResourceLimits, docker_available, kill_container
 from secaudit.core.scanners import (
@@ -33,7 +34,7 @@ from secaudit.core.scanners import (
     run_adapter,
 )
 from secaudit.core.scanners.base import Executor
-from secaudit.core.scanners.semgrep import SEMGREPIGNORE_BODY, SEMGREPIGNORE_NAME
+from secaudit.core.scanners.semgrep import SEMGREPIGNORE_NAME
 
 MANIFEST_SCHEMA_VERSION = 1
 
@@ -100,6 +101,7 @@ def build_manifest(
     intake_result: IntakeResult,
     results: list[RawScanResult],
     audit_dir: Path,
+    neutralized_files: list[str] | None = None,
 ) -> dict:
     """Assemble manifest.json content. All paths are POSIX-style and relative to the audit dir."""
     tools: dict[str, dict] = {}
@@ -151,6 +153,7 @@ def build_manifest(
             "skipped_entries": list(intake_result.skipped),
         },
         "workspace_policy_files": [SEMGREPIGNORE_NAME],
+        "neutralized_files": list(neutralized_files or []),
         "tool_order": [r.tool for r in results],
         "tools": tools,
         "summary": {
@@ -159,14 +162,6 @@ def build_manifest(
             "failed": sum(r.status in ("failed", "timeout") for r in results),
         },
     }
-
-
-def _write_policy_files(workspace: Path) -> None:
-    """Scan-scope policy comes from us, never from the scanned content."""
-    policy = workspace / SEMGREPIGNORE_NAME
-    policy.write_text(SEMGREPIGNORE_BODY, encoding="utf-8", newline="\n")
-    if os.name == "posix":
-        os.chmod(policy, 0o644)
 
 
 def run_scan(
@@ -208,7 +203,7 @@ def run_scan(
             include_git=options.include_git,
         )
         exe.forbid(intake_result.workspace)
-        _write_policy_files(intake_result.workspace)
+        neutralized_files = neutralize_workspace(intake_result.workspace)
 
         audit_dir = options.out_root / audit_id
         raw_dir = audit_dir / "raw"
@@ -253,6 +248,7 @@ def run_scan(
             intake_result=intake_result,
             results=results,
             audit_dir=audit_dir,
+            neutralized_files=neutralized_files,
         )
         (audit_dir / "manifest.json").write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n"

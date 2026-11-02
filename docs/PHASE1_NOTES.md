@@ -69,6 +69,34 @@ rejected, `4` a tool failed/timed out, `5` environment (Docker down, images or r
 | Unsafe native execution | refuses without `--i-trust-this-code` | `test_native_runner_refuses_without_trust_flag` |
 | Local paths leaking into the manifest | host paths replaced by placeholders; POSIX-relative artifact paths | `test_manifest_and_raw_outputs` |
 
+## Scanner neutralization matrix (remediation of review #2/#3)
+
+Every mechanism below was planted in a copy of the benchmark target and scanned through the real orchestrator and
+sandbox (`tests/test_scanner_neutralization.py`, marker `docker`). "Before" = unfixed Phase 1 code (root policy
+file only); "after" = with `core/neutralize.py`. Baseline counts: Bandit 16, Semgrep 11, Gitleaks 3.
+
+| Tool | Mechanism planted in the scanned tree | Before | Neutralization |
+|---|---|---|---|
+| Bandit | `.bandit` at root | **1 result: effective** | removed |
+| Bandit | `.bandit` nested (`webshop/`) | **13: effective** | removed at any depth |
+| Bandit | `.bandit` as a directory | 16, not effective | removed anyway |
+| Bandit | `setup.cfg` / `tox.ini` `[bandit]`, `pyproject [tool.bandit]`, `bandit.yaml` | 16, not effective | left alone (verified inert) |
+| Bandit | `#nosec` comment | 16, not effective (`--ignore-nosec`) | flag |
+| Semgrep | `.semgrepignore` nested | **1 result: effective** | removed at any depth |
+| Semgrep | `.semgrepignore` at root / as a directory | root file replaced; directory **crashed the scan** (`PermissionError`) | replaced or removed |
+| Semgrep | `tests/.semgrepignore`, `.semgrep/settings.yml`, `.gitignore`, hostile `.git/` dir, `# nosemgrep` | 11, not effective | left alone |
+| Gitleaks | `.gitleaksignore` root or nested | **0 results: effective** (new finding, not in the review; `--gitleaks-ignore-path /opt/no-ignore` does not stop it) | removed at any depth |
+| Gitleaks | `.gitleaks.toml` root / nested / directory | 3, not effective in the sandbox (`--config` is passed) but effective for the native runner | removed |
+| Gitleaks | `gitleaks:allow` comment, `.gitignore` listing secrets | 3, not effective (`--ignore-gitleaks-allow`) | flag |
+| pip-audit | hostile requirements options (`--index-url`, `--extra-index-url`, `-r`, `-e`, URLs, unpinned) | not effective by construction: only exact `name==version` pins are staged, the rest becomes `unresolved` | n/a |
+
+Why `.git` and `.gitignore` are inert: none of the four images contains a `git` binary (asserted by
+`test_images_contain_no_git_so_git_mode_cannot_activate`), so Semgrep's git-tracked-files mode cannot activate.
+That test exists because the situation would change silently if someone added git to an image (and, on a Linux
+host with `--user <host uid>`, directory ownership would no longer stop git from trusting the workspace).
+Every removed or replaced path is listed in `manifest.json` under `neutralized_files`. Explicit tool config was
+not used: deletion is uniform across tools and the native runner and is verified empirically.
+
 ## Container vs native parity
 
 Both runs scan the same target. Native = Phase 0/Task 0 outputs (now `benchmarks/baseline/raw_native/`),

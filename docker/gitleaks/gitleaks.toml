@@ -1,0 +1,6 @@
+# secaudit-controlled Gitleaks config. Scanned code must not be able to supply its own
+# .gitleaks.toml (e.g. to allowlist its own secrets), so the scan always passes --config here.
+title = "secaudit default"
+
+[extend]
+useDefault = true

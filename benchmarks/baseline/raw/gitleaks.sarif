@@ -1378,6 +1378,74 @@
      "properties": {
       "tags": []
      }
+    },
+    {
+     "message": {
+      "text": "aws-access-token has detected secret for file config/settings.ini."
+     },
+     "ruleId": "aws-access-token",
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "config/settings.ini"
+        },
+        "region": {
+         "startLine": 7,
+         "startColumn": 22,
+         "endLine": 7,
+         "endColumn": 41,
+         "snippet": {
+          "text": "bench_uoSN55OKIJ9XKt"
+         }
+        }
+       }
+      }
+     ],
+     "partialFingerprints": {
+      "commitSha": "",
+      "email": "",
+      "author": "",
+      "date": "",
+      "commitMessage": ""
+     },
+     "properties": {
+      "tags": []
+     }
+    },
+    {
+     "message": {
+      "text": "generic-api-key has detected secret for file config/settings.ini."
+     },
+     "ruleId": "generic-api-key",
+     "locations": [
+      {
+       "physicalLocation": {
+        "artifactLocation": {
+         "uri": "config/settings.ini"
+        },
+        "region": {
+         "startLine": 8,
+         "startColumn": 2,
+         "endLine": 8,
+         "endColumn": 65,
+         "snippet": {
+          "text": "bench_BvXX7C2JUsDNWWhy5PUSWscCmH1w2oxhud"
+         }
+        }
+       }
+      }
+     ],
+     "partialFingerprints": {
+      "commitSha": "",
+      "email": "",
+      "author": "",
+      "date": "",
+      "commitMessage": ""
+     },
+     "properties": {
+      "tags": []
+     }
     }
    ]
   }

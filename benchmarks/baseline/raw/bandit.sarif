@@ -7,6 +7,18 @@
           "organization": "PyCQA",
           "rules": [
             {
+              "id": "B201",
+              "name": "flask_debug_true",
+              "properties": {
+                "tags": [
+                  "security",
+                  "external/cwe/cwe-94"
+                ],
+                "precision": "medium"
+              },
+              "helpUri": "https://bandit.readthedocs.io/en/1.9.4/plugins/b201_flask_debug_true.html"
+            },
+            {
               "id": "B105",
               "name": "hardcoded_password_string",
               "properties": {
@@ -134,13 +146,13 @@
       "invocations": [
         {
           "executionSuccessful": true,
-          "endTimeUtc": "2026-11-02T20:33:27Z"
+          "endTimeUtc": "2026-11-02T20:42:15Z"
         }
       ],
       "properties": {
         "metrics": {
           "_totals": {
-            "loc": 114,
+            "loc": 122,
             "nosec": 0,
             "skipped_tests": 0,
             "SEVERITY.UNDEFINED": 0,
@@ -148,9 +160,22 @@
             "SEVERITY.LOW": 9,
             "CONFIDENCE.LOW": 1,
             "SEVERITY.MEDIUM": 3,
-            "CONFIDENCE.MEDIUM": 2,
-            "SEVERITY.HIGH": 3,
+            "CONFIDENCE.MEDIUM": 3,
+            "SEVERITY.HIGH": 4,
             "CONFIDENCE.HIGH": 12
+          },
+          ".\\dev_server.py": {
+            "loc": 8,
+            "nosec": 0,
+            "skipped_tests": 0,
+            "SEVERITY.UNDEFINED": 0,
+            "SEVERITY.LOW": 0,
+            "SEVERITY.MEDIUM": 0,
+            "SEVERITY.HIGH": 1,
+            "CONFIDENCE.UNDEFINED": 0,
+            "CONFIDENCE.LOW": 0,
+            "CONFIDENCE.MEDIUM": 1,
+            "CONFIDENCE.HIGH": 0
           },
           ".\\tests\\conftest.py": {
             "loc": 4,
@@ -300,6 +325,43 @@
       "results": [
         {
           "message": {
+            "text": "A Flask app appears to be run with debug=True, which exposes the Werkzeug debugger and allows the execution of arbitrary code."
+          },
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "region": {
+                  "snippet": {
+                    "text": "    app.run(debug=True)\n"
+                  },
+                  "endColumn": 24,
+                  "endLine": 14,
+                  "startColumn": 5,
+                  "startLine": 14
+                },
+                "artifactLocation": {
+                  "uri": "dev_server.py"
+                },
+                "contextRegion": {
+                  "snippet": {
+                    "text": "if __name__ == \"__main__\":\n    app.run(debug=True)\n"
+                  },
+                  "endLine": 14,
+                  "startLine": 13
+                }
+              }
+            }
+          ],
+          "properties": {
+            "issue_confidence": "MEDIUM",
+            "issue_severity": "HIGH"
+          },
+          "ruleId": "B201",
+          "ruleIndex": 0
+        },
+        {
+          "message": {
             "text": "Possible hardcoded password: 'placeholder-not-a-real-password'"
           },
           "level": "note",
@@ -333,7 +395,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B105",
-          "ruleIndex": 0
+          "ruleIndex": 1
         },
         {
           "message": {
@@ -370,7 +432,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B101",
-          "ruleIndex": 1
+          "ruleIndex": 2
         },
         {
           "message": {
@@ -407,7 +469,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B101",
-          "ruleIndex": 1
+          "ruleIndex": 2
         },
         {
           "message": {
@@ -444,7 +506,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B101",
-          "ruleIndex": 1
+          "ruleIndex": 2
         },
         {
           "message": {
@@ -481,7 +543,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B101",
-          "ruleIndex": 1
+          "ruleIndex": 2
         },
         {
           "message": {
@@ -518,7 +580,7 @@
             "issue_severity": "HIGH"
           },
           "ruleId": "B324",
-          "ruleIndex": 2
+          "ruleIndex": 3
         },
         {
           "message": {
@@ -555,7 +617,7 @@
             "issue_severity": "HIGH"
           },
           "ruleId": "B324",
-          "ruleIndex": 2
+          "ruleIndex": 3
         },
         {
           "message": {
@@ -591,7 +653,7 @@
             "issue_severity": "MEDIUM"
           },
           "ruleId": "B608",
-          "ruleIndex": 3
+          "ruleIndex": 4
         },
         {
           "message": {
@@ -628,7 +690,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B403",
-          "ruleIndex": 4
+          "ruleIndex": 5
         },
         {
           "message": {
@@ -664,7 +726,7 @@
             "issue_severity": "MEDIUM"
           },
           "ruleId": "B506",
-          "ruleIndex": 5
+          "ruleIndex": 6
         },
         {
           "message": {
@@ -700,7 +762,7 @@
             "issue_severity": "MEDIUM"
           },
           "ruleId": "B301",
-          "ruleIndex": 6
+          "ruleIndex": 7
         },
         {
           "message": {
@@ -737,7 +799,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B105",
-          "ruleIndex": 0
+          "ruleIndex": 1
         },
         {
           "message": {
@@ -774,7 +836,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B404",
-          "ruleIndex": 7
+          "ruleIndex": 8
         },
         {
           "message": {
@@ -811,7 +873,7 @@
             "issue_severity": "HIGH"
           },
           "ruleId": "B602",
-          "ruleIndex": 8
+          "ruleIndex": 9
         },
         {
           "message": {
@@ -848,7 +910,7 @@
             "issue_severity": "LOW"
           },
           "ruleId": "B603",
-          "ruleIndex": 9
+          "ruleIndex": 10
         }
       ]
     }

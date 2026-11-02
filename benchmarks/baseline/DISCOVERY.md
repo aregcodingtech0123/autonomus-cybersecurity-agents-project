@@ -146,3 +146,56 @@ README text. These only matter once an LLM reads the repository (Phase 3).
 - Tool-only baseline on this target: 7/10 positives found, 4/6 negatives falsely flagged. That is the number the
   agent layer has to improve, mostly by dismissing N02/N04/N05/N06 with evidence, never by deleting findings.
 - A "no network" sandbox conflicts with pip-audit and registry-based Semgrep. See `docs/SECURITY_POLICY.md` for how this is handled.
+
+---
+
+## Addendum (Phase 1, Task 0) - corrections to the sections above
+
+Everything above is left as originally written. Review found two flawed or misexplained cases;
+this addendum supersedes the affected statements. Native re-run on 2026-11-02, same tool
+versions (Bandit 1.9.4, Semgrep 1.183.0, Gitleaks 8.30.1) and same commands.
+
+### A1. P03 was a flawed benchmark case, not a tool miss
+
+P03 used AWS's documented example key. The earlier text called it a "miss" and
+suggested allowlisting as an inference. A review (correctly) pointed out that this made the
+case invalid as a positive. Changes:
+
+- `P03` now uses a random synthetic key pair that matches the AWS key pattern, is not a documented
+  example, and is not valid (`config/settings.ini` lines 7-8; line numbers unchanged).
+- The documented example pair was kept as a new **negative case N07** (lines 12-13, appended so no
+  existing line moved).
+- Observed after the change: Gitleaks reports `aws-access-token` (line 7) and `generic-api-key`
+  (line 8) for P03 and reports **nothing** for N07. Bandit and Semgrep report nothing in the file.
+- Corrected statement: P03 is **detected by Gitleaks**. The "7 of 10 positives" figure above was
+  computed with the flawed P03 and no longer applies; see A3.
+
+### A2. P08: why Bandit and Semgrep miss `debug=True` in `wsgi.py` (verified in source)
+
+- **Bandit B201** (`bandit/plugins/app_debug.py`, `flask_debug_true`) fires only when all three hold:
+  `context.is_module_imported_like("flask")` (a flask import **in the same file**), the call's qualified name
+  ends with `.run`, and the call has the keyword `debug=True`. It does not track where `app` came from.
+- **Semgrep `python.flask.security.audit.debug-enabled`** (in `p/python`) is
+  `pattern-inside: import flask ...` + `$APP.run(..., debug=True, ...)`. Same file-level flask import requirement.
+  (Rule definition read from the registry copy Semgrep wrote locally during a debug run.)
+- `wsgi.py` does `from webshop import create_app` and never imports flask, so neither rule can match.
+  It is a genuine recall gap for the common "app factory in another module" layout. P08 is kept unchanged.
+- New variant **P08b** (`dev_server.py:14`): Flask app created and run with `debug=True` in one file.
+  Observed: Bandit B201 (HIGH/MEDIUM) and Semgrep `debug-enabled` both fire (also in the `p/flask` +
+  `p/security-audit` run).
+- No other target code was changed.
+
+### A3. Updated hit/miss on the native baseline (primary configuration)
+
+| Case | Bandit | Semgrep `p/python` | Gitleaks | pip-audit |
+|---|---|---|---|---|
+| P03 (revised) | - | - | **Y** (2 rules) | n/a |
+| P08 (wsgi.py) | - | - | - | n/a |
+| P08b (new) | **Y** B201 | **Y** `debug-enabled` | - | n/a |
+| N07 (new negative) | - | - | - (not flagged) | n/a |
+
+Positives detected by at least one tool: **9 of 11** (P01-P07, P08b, P09; P03 now included).
+Still missed by every tool: **P08, P10**. Negatives falsely flagged: still 4 of 7 (N02, N04, N05, N06); N07 is clean.
+
+The raw files in `raw/` were regenerated natively for this addendum (the pre-addendum versions remain
+in git history).

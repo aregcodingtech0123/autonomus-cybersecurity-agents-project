@@ -26,7 +26,8 @@ REQUIRED = ("id", "title", "kind", "file", "line_start", "line_end", "anchor", "
 CWE_RE = re.compile(r"^CWE-\d+$")
 EXPECTED_IDS = (
     {f"P{i:02d}" for i in range(1, 11)}
-    | {f"N{i:02d}" for i in range(1, 7)}
+    | {"P08b"}
+    | {f"N{i:02d}" for i in range(1, 8)}
     | {f"I{i:02d}" for i in range(1, 3)}
 )
 

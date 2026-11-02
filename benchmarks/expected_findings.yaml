@@ -46,18 +46,20 @@ cases:
       Bandit B105 flags only line 4 (ADMIN_PASSWORD variable name). No tool flags both lines.
 
   - id: P03
-    title: AWS documentation example key pair in a config file
+    title: Synthetic AWS-pattern key pair in a config file
     kind: positive
     file: config/settings.ini
     line_start: 7
     line_end: 8
-    anchor: bench_eEA2vGLEXAMPLE
+    anchor: bench_uoSN55OKIJ9XKt
     cwe: CWE-798
-    expected_detecting_tools: []
+    expected_detecting_tools: [gitleaks]
     notes: >
-      Gitleaks 8.30.1 does not report these AWS example values. A throwaway probe with a
-      non-EXAMPLE AWS-shaped key in the same file shape WAS detected, so the miss is specific
-      to the documented example values. Only well-known fakes are used here, by design.
+      REVISED in Phase 1 (Task 0). The original value was AWS's documented example key, which
+      Gitleaks allowlists, so the case was flawed (the old "miss" was not a tool miss). It now
+      uses a random synthetic key that matches the AWS pattern but is not a documented example
+      and is not valid. Gitleaks 8.30.1 reports aws-access-token (line 7) and generic-api-key
+      (line 8). The documented example key moved to negative case N07.
 
   - id: P04
     title: yaml.load with the unsafe default Loader
@@ -121,11 +123,27 @@ cases:
     cwe: CWE-489
     expected_detecting_tools: []
     notes: >
-      Missed by every tool and every Semgrep ruleset tried. Bandit B201 (flask_debug_true)
-      did not fire; app.run() is called on an object from create_app() and wsgi.py does not
-      import flask directly. (An earlier draft of this line also set host="0.0.0.0", which
-      made Bandit B104 and a Semgrep rule fire for a different reason; it was removed so P08
-      is a single, unambiguous issue. See DISCOVERY.md.)
+      Missed by every tool and every Semgrep ruleset tried. Root cause (verified in source):
+      Bandit B201 requires `flask` to be imported in the same file, and Semgrep's
+      debug-enabled rule has `pattern-inside: import flask ...`. wsgi.py gets `app` from
+      create_app() and never imports flask, so neither rule can match. This is a genuine
+      recall gap for the cross-module pattern; P08b is the same-file variant. (An earlier
+      draft of this line also set host="0.0.0.0"; it was removed so P08 is a single issue.
+      See DISCOVERY.md.)
+
+  - id: P08b
+    title: Flask app created and run with debug=True in the same file
+    kind: positive
+    file: dev_server.py
+    line_start: 14
+    line_end: 14
+    anchor: app.run(debug=True)
+    cwe: CWE-489
+    expected_detecting_tools: [bandit, semgrep]
+    notes: >
+      Added in Phase 1 (Task 0). Bandit B201 (HIGH/MEDIUM) and Semgrep
+      python.flask.security.audit.debug-enabled (in p/python) both fire. Together with P08
+      this shows the detection depends on a `flask` import in the same file.
 
   - id: P09
     title: requirements.txt pins packages with known CVEs
@@ -232,6 +250,20 @@ cases:
     notes: >
       Bandit B324 (HIGH/HIGH) and Semgrep insecure-hash-algorithm-md5 both flag it despite the
       explanatory comment. A triage layer is expected to dismiss this one.
+
+  - id: N07
+    title: AWS documented example key pair (allowlisted by design)
+    kind: negative
+    file: config/settings.ini
+    line_start: 12
+    line_end: 13
+    anchor: bench_eEA2vGLEXAMPLE
+    cwe: CWE-798
+    expected_detecting_tools: []
+    observed_false_alarms: []
+    notes: >
+      Added in Phase 1 (Task 0): the original P03 value, kept as a negative. Gitleaks 8.30.1
+      does not report it, which is the desired behavior.
 
   # ----------------------------------------------------------- injection bait
   - id: I01

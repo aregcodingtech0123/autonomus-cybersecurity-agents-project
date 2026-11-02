@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "secaudit"
 version = "0.1.0"
 description = "Multi-agent security audit platform: real scanners find, LLM agents triage."

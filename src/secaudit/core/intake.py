@@ -8,7 +8,9 @@ limits, and carries metadata (kind, sha256, file count, total bytes). Every reje
 
 from __future__ import annotations
 
+import contextlib
 import enum
+import errno
 import hashlib
 import ipaddress
 import os
@@ -60,6 +62,8 @@ class Reason(enum.StrEnum):
     COMPRESSION_RATIO_EXCEEDED = "compression_ratio_exceeded"
     SIZE_MISMATCH = "size_mismatch"
     IO_ERROR = "io_error"
+    HARDLINK = "hardlink"
+    CHANGED_DURING_INTAKE = "changed_during_intake"
     GIT_URL_SCHEME = "git_url_scheme"
     GIT_URL_INVALID = "git_url_invalid"
     GIT_HOST_NOT_ALLOWED = "git_host_not_allowed"
@@ -114,10 +118,31 @@ class IntakeResult:
 # --------------------------------------------------------------------------- helpers
 
 _WINDOWS_RESERVED = {
-    "CON", "PRN", "AUX", "NUL",
-    *(f"COM{i}" for i in range(1, 10)),
-    *(f"LPT{i}" for i in range(1, 10)),
+    "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$",
+    *(f"COM{i}" for i in range(0, 10)),
+    *(f"LPT{i}" for i in range(0, 10)),
 }  # fmt: skip
+_WINDOWS_INVALID_CHARS = frozenset('<>"|?*')
+WINDOWS_PATH_LIMIT = 259  # MAX_PATH (260) minus the terminating NUL
+POSIX_PATH_LIMIT = 4095
+COMPONENT_BYTE_LIMIT = 255
+
+
+def _is_reserved_device_name(part: str) -> bool:
+    """True for CON, "CON .txt", COM-superscript-one ...: Windows treats them as devices."""
+    folded = unicodedata.normalize("NFKC", part).rstrip(" .")
+    return folded.split(".")[0].rstrip(" ").upper() in _WINDOWS_RESERVED
+
+
+def _check_path_length(target: str, *, os_name: str | None = None) -> None:
+    """Reject paths the OS cannot create, with a typed error instead of a late OSError."""
+    limit = WINDOWS_PATH_LIMIT if (os_name or os.name) == "nt" else POSIX_PATH_LIMIT
+    if len(target) > limit:
+        raise IntakeError(
+            Reason.UNSAFE_NAME, f"path exceeds the {limit}-character OS limit once extracted"
+        )
+
+
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
 _ARCHIVE_EXTENSIONS = (
     ".zip", ".jar", ".war", ".ear", ".whl", ".egg", ".apk", ".tar", ".tgz", ".gz",
@@ -257,6 +282,19 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+@contextlib.contextmanager
+def _io_guard():
+    """Turn ANY filesystem error during intake into a typed rejection without leaking host paths."""
+    try:
+        yield
+    except (IntakeError, CleanupError):
+        raise
+    except OSError as exc:
+        raise IntakeError(
+            Reason.IO_ERROR, f"filesystem error during intake (errno {exc.errno})"
+        ) from None
+
+
 def _make_workspace(parent: Path | None) -> Path:
     if parent is not None:
         parent.mkdir(parents=True, exist_ok=True)
@@ -295,6 +333,7 @@ def _copy_tree(
     for rel, entry in _iter_tree(root, include_git):
         assert entry is not None  # noqa: S101 - iterator contract
         target = dest.joinpath(*rel.split("/"))
+        _check_path_length(str(target))
         if len(rel) > limits.max_path_length:
             raise IntakeError(Reason.UNSAFE_NAME, f"path too long: {rel[:80]}...")
         if _is_link(entry.path):
@@ -320,14 +359,37 @@ def _copy_tree(
 def _copy_regular(src: Path, dest: Path, budget: _Budget) -> str:
     """Copy one file via an O_NOFOLLOW descriptor, re-checking the type after opening."""
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+    before = os.lstat(src)  # DirEntry.stat() has no st_ino/st_dev on Windows; lstat does
     try:
         fd = os.open(src, flags)
     except OSError as exc:
-        raise IntakeError(Reason.SPECIAL_FILE, f"cannot open {src.name} safely: {exc}") from exc
+        if exc.errno == errno.ELOOP:  # O_NOFOLLOW hit a symlink that appeared after the check
+            raise IntakeError(
+                Reason.SPECIAL_FILE, "an entry turned into a symlink during intake"
+            ) from None
+        raise IntakeError(
+            Reason.IO_ERROR, f"cannot open an input file (errno {exc.errno})"
+        ) from None
     digest = hashlib.sha256()
     with os.fdopen(fd, "rb") as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+        opened = os.fstat(handle.fileno())
+        if not stat.S_ISREG(opened.st_mode):
             raise IntakeError(Reason.SPECIAL_FILE, f"{src.name} changed type during copy")
+        # Identity check closes the lstat -> open race where reliable ids exist (POSIX, NTFS).
+        # What it cannot do: Windows has no O_NOFOLLOW and parent components are still followed.
+        if (
+            before.st_ino
+            and opened.st_ino
+            and (before.st_dev, before.st_ino) != (opened.st_dev, opened.st_ino)
+        ):
+            raise IntakeError(
+                Reason.CHANGED_DURING_INTAKE, f"{src.name} was replaced while being copied"
+            )
+        if opened.st_nlink > 1:
+            raise IntakeError(
+                Reason.HARDLINK,
+                f"{src.name} has {opened.st_nlink} hard links; it may alias an outside file",
+            )
         dest.parent.mkdir(parents=True, exist_ok=True)
         written = 0
         with dest.open("xb") as out:
@@ -350,9 +412,11 @@ def intake_directory(
     src = Path(path)
     if not src.is_dir():
         raise IntakeError(Reason.INPUT_NOT_FOUND, f"not a directory: {src.name}")
-    workspace = _make_workspace(workspace_parent)
+    with _io_guard():
+        workspace = _make_workspace(workspace_parent)
     try:
-        files, total, digest, skipped = _copy_tree(src, workspace, limits, include_git)
+        with _io_guard():
+            files, total, digest, skipped = _copy_tree(src, workspace, limits, include_git)
     except BaseException as exc:
         _discard(workspace, exc)
         raise
@@ -383,8 +447,14 @@ def _check_member_name(raw: str, limits: IntakeLimits) -> tuple[list[str], bool]
             raise IntakeError(Reason.UNSAFE_NAME, f"empty or '.' component: {raw[:60]!r}")
         if ":" in part or part.endswith((" ", ".")):
             raise IntakeError(Reason.UNSAFE_NAME, f"unsafe component {part[:40]!r}")
-        if part.split(".")[0].upper() in _WINDOWS_RESERVED:
+        if _is_reserved_device_name(part):
             raise IntakeError(Reason.UNSAFE_NAME, f"reserved device name {part[:40]!r}")
+        if any(c in _WINDOWS_INVALID_CHARS for c in part):
+            raise IntakeError(
+                Reason.UNSAFE_NAME, f"character not valid on Windows in {part[:40]!r}"
+            )
+        if len(part.encode("utf-8")) > COMPONENT_BYTE_LIMIT:
+            raise IntakeError(Reason.UNSAFE_NAME, "path component longer than 255 bytes")
     return parts, is_dir
 
 
@@ -417,10 +487,12 @@ def intake_zip(
     archive = Path(path)
     if not archive.is_file():
         raise IntakeError(Reason.INPUT_NOT_FOUND, f"not a file: {archive.name}")
-    input_sha = _hash_file(archive)
-    workspace = _make_workspace(workspace_parent)
+    with _io_guard():
+        input_sha = _hash_file(archive)
+        workspace = _make_workspace(workspace_parent)
     try:
-        files, total = _extract_zip(archive, workspace, limits)
+        with _io_guard():
+            files, total = _extract_zip(archive, workspace, limits)
     except BaseException as exc:
         _discard(workspace, exc)
         raise
@@ -466,6 +538,7 @@ def _extract_zip(archive: Path, workspace: Path, limits: IntakeLimits) -> tuple[
                     raise IntakeError(Reason.DUPLICATE_ENTRY, f"{info.filename[:60]!r}")
                 file_keys.add(keys[-1])
                 dir_keys.update(keys[:-1])
+            _check_path_length(str(workspace.joinpath(*parts)))  # before anything is written
             plan.append((info, parts, is_dir))
 
         # Pass 2: extract entry by entry, counting the bytes that are actually produced.
@@ -688,7 +761,10 @@ def intake_git(
         commit = _git_head(clone_dir, _git_env(home))
         remove_tree(clone_dir / ".git")  # history is never scanned or exposed
         workspace = _make_workspace(workspace_parent)
-        files, total, _tree, skipped = _copy_tree(clone_dir, workspace, limits, include_git=False)
+        with _io_guard():
+            files, total, _tree, skipped = _copy_tree(
+                clone_dir, workspace, limits, include_git=False
+            )
     except BaseException as exc:
         if workspace is not None:
             _discard(workspace, exc)

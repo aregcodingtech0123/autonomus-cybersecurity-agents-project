@@ -1,0 +1,148 @@
+# Scanner output discovery (Phase 0 probe)
+
+Goal: learn what the real tools emit, so the Phase 2 data model is based on observed output.
+No adapters exist yet. Raw, unedited outputs are in [`raw/`](raw/). Nothing below was written
+from memory: every hit, miss and quirk was read from those files. The target code was **not**
+tuned to make tools look good (one correction to the target is disclosed under *Process notes*).
+
+## Environment
+
+| Item | Value |
+|---|---|
+| Date of scan | 2026-11-02 |
+| OS | Windows 11 Pro, native (no WSL) |
+| Python / uv | CPython 3.13.11 / uv 0.13.6 |
+| Docker | CLI present, **daemon not running** - Docker was not used; all four tools ran natively |
+| Target | `benchmarks/targets/vuln_python_app/` (scanned from inside that directory, path `.`) |
+
+## Tools, versions, commands
+
+All commands were run from `benchmarks/targets/vuln_python_app/`. `$RAW` = `benchmarks/baseline/raw`.
+
+| Tool | Version (observed) | Install / run | Exact command | Output |
+|---|---|---|---|---|
+| Bandit | 1.9.4 | `uvx --from "bandit[sarif]"` | `bandit -r . -f sarif -o $RAW/bandit.sarif` | `bandit.sarif` |
+| Semgrep | 1.183.0 | `uvx semgrep` | `semgrep scan --config p/python --metrics=off --sarif --sarif-output=$RAW/semgrep.sarif --disable-version-check .` | `semgrep.sarif` |
+| Semgrep (supplementary) | 1.183.0 | same | `semgrep scan --config p/flask --config p/security-audit ... --sarif-output=$RAW/semgrep-flask-security-audit.sarif .` | `semgrep-flask-security-audit.sarif` |
+| Gitleaks | 8.30.1 | GitHub release zip, SHA-256 checked against the published `checksums.txt` | `gitleaks dir . --report-format sarif --report-path $RAW/gitleaks.sarif --no-banner` | `gitleaks.sarif` |
+| pip-audit | 2.10.1 | `uvx pip-audit` | `pip-audit -r requirements.txt -f json -o $RAW/pip-audit.json` | `pip-audit.json` |
+| pip-audit (supplementary) | 2.10.1 | same | `pip-audit -r requirements.txt --no-deps --disable-pip -f json -o $RAW/pip-audit.no-deps.json` | `pip-audit.no-deps.json` |
+
+Not verified: the gitleaks release signature (only the SHA-256 from the same release page was
+checked). Semgrep registry rules (`p/...`) are fetched live and not version-pinned, so
+results can change between runs.
+
+All four tools returned exit code 1 when findings existed (Semgrep returned 0 even with
+findings, because it was not run with `--error`). A Phase 1 runner must not treat non-zero as failure.
+
+## Results: positives (P01-P10)
+
+`Y` = detected at the right place, `-` = not detected, `partial` = detected for only part of the case.
+
+| Case | What | Bandit | Semgrep `p/python` | Semgrep `+p/flask +p/security-audit` | Gitleaks | pip-audit |
+|---|---|---|---|---|---|---|
+| P01 | SQLi f-string | Y B608 (conf. LOW) | Y 2 rules | Y | - | n/a |
+| P02 | hardcoded key + password | partial B105 (password, line 4) | - | - | partial `stripe-access-token` (key, line 3) | n/a |
+| P03 | AWS example key in config | - | - | - | **-** | n/a |
+| P04 | `yaml.load` unsafe | Y B506 | Y `avoid-pyyaml-load` | Y | - | n/a |
+| P05 | `shell=True` + user input | Y B602 | Y 3 rules | Y 2 rules | - | n/a |
+| P06 | `pickle.loads` request data | Y B301 | **-** | Y `avoid-pickle` | - | n/a |
+| P07 | md5 password hash | Y B324 | Y 2 rules | **-** | - | n/a |
+| P08 | `debug=True` | **-** | **-** | **-** | - | n/a |
+| P09 | vulnerable pins | n/a | n/a | n/a | n/a | Y all 3 packages |
+| P10 | path traversal | **-** | **-** | **-** | - | n/a |
+
+Union of the primary configuration (Bandit + Semgrep `p/python` + Gitleaks + pip-audit):
+**7 of 10 detected** (P01, P02 (two lines, two tools), P04, P05, P06, P07, P09). **Missed by every tool: P03, P08, P10.**
+
+### Why the misses (what is verified vs. inferred)
+
+- **P03** - verified: Gitleaks does detect an AWS-shaped key (`aws-access-token` + `generic-api-key`)
+  in a throwaway file with the same structure but a non-`EXAMPLE` key. So the miss is specific to
+  AWS's documented example values. Inferred (rule source not read): these are allowlisted by design.
+  This is arguably *correct* tool behavior; it means the case tests "known example secrets", not real leaks.
+- **P08** - verified: Bandit B201 did not fire. Inferred: B201 only matches when `flask` is
+  imported in the same file; `wsgi.py` gets `app` from `create_app()`. No Semgrep ruleset tried flagged `debug=True`.
+- **P10** - no Bandit rule exists for it; neither Semgrep ruleset flagged `open(os.path.join(UPLOAD_DIR, request...))`.
+  Taint tracking across `request.args` -> `os.path.join` -> `open` was not matched.
+- **P06 / P07 Semgrep gaps** are ruleset-dependent: `p/python` has md5 rules but not pickle;
+  `p/flask` + `p/security-audit` has pickle but not md5.
+
+### P09 detail (CVE ids are copied from pip-audit's output)
+
+Flask 2.0.1 (CVE-2023-30861, CVE-2026-27205), PyYAML 5.3.1 (CVE-2020-14343),
+requests 2.19.0 (CVE-2018-18074 plus 4 more CVE aliases). Default mode also resolved and reported
+transitive dependencies (urllib3 1.23: 12 distinct ids; idna 2.7: 2): 43 entries in 5 packages
+vs. 16 entries in 3 packages in `--no-deps` mode.
+
+## Results: negatives (N01-N06) - false alarms
+
+| Case | What | Bandit | Semgrep | Gitleaks | Verdict |
+|---|---|---|---|---|---|
+| N01 | parameterized query | - | - | - | clean |
+| N02 | `shell=False`, constant list | **B603** (+ B404 on `import subprocess`) | - | - | Bandit false alarm (LOW) |
+| N03 | `yaml.safe_load` | - | - | - | clean |
+| N04 | `assert` in tests/ | **B101** x4 | not scanned (see below) | - | Bandit false alarm (LOW) |
+| N05 | placeholder password in fixture | **B105** | not scanned | - | Bandit false alarm (LOW) |
+| N06 | md5 cache key, commented | **B324 (HIGH/HIGH)** | **`insecure-hash-algorithm-md5`** | - | false alarm in 2 tools; severity HIGH in Bandit despite the comment |
+
+**4 of 6 negatives were flagged** (N02, N04, N05, N06). Bandit alone flagged all four. N06 is the
+important one: both tools flag it at high severity, and only reasoning over the comment/usage can dismiss it.
+
+Findings that map to no case (noise on import lines): Bandit B403 (`import pickle`,
+`serialization.py:3`) and B404 (`import subprocess`, `system.py:3`).
+
+Raw totals: Bandit 15 results, Semgrep 9, Semgrep supplementary 5, Gitleaks 1, pip-audit 43 entries.
+
+## Prompt-injection bait (I01, I02)
+
+No scanner reported or reacted to either (expected). Bandit/Semgrep/Gitleaks do not read comments or
+README text. These only matter once an LLM reads the repository (Phase 3).
+
+## Surprises and format quirks (these shape the Phase 2 model)
+
+1. **Semgrep skips `tests/` by default** (`.semgrepignore`; verbose output lists both test files). The
+   Semgrep "clean" result on N04/N05 is therefore not a real negative. Scope also depends on `git ls-files`
+   when run inside a git repository; behavior outside git was not tested.
+2. **Semgrep SARIF**: URIs use backslashes on Windows (`webshop\auth.py`); results carry no `level` (it lives
+   in `rules[].defaultConfiguration`); `fingerprints` is the literal string `"requires login"`; rule
+   ids are long dotted paths. `sql-injection-db-cursor-execute` sits in the `django` namespace yet fires on
+   sqlite3 in a Flask app.
+3. **Bandit SARIF**: needs the `bandit[sarif]` extra. `level` is `error` (HIGH), `note` (LOW) and **absent**
+   for MEDIUM; severity/confidence are in `properties.issue_severity` / `issue_confidence`. SARIF default
+   for a missing level is "warning", which a naive parser would miss.
+4. **Gitleaks SARIF**: `driver.version` reads `v8.0.0` although the binary is 8.30.1 (do not trust it as the tool version). Reports the
+   secret text itself in the output (here, a fake) - raw Gitleaks output must be masked before any LLM sees it.
+   The subcommand is `gitleaks dir` (not `detect --no-git`).
+5. **pip-audit has no SARIF output.** It produces JSON with `{dependencies:[{name,version,vulns:[...]}], fixes}`
+   and **no file/line** - mapping a finding to a line in `requirements.txt` is our job. Almost every vulnerability
+   entry is **duplicated** (e.g. `PYSEC-2023-62` twice for Flask, with different descriptions): dedup is mandatory.
+   Results are time-dependent (the resolver picked `certifi==2026.10.23` today).
+6. **Network dependence**: pip-audit queries a vulnerability service; default mode also builds a temporary venv and
+   installs the pinned packages. Semgrep `p/...` configs download rules from the registry.
+   Bandit and Gitleaks need no network.
+7. **Semgrep ran natively on Windows** here, but that is not a supported path to build on; Phase 1 should target a Linux image.
+8. **Severity vocabularies differ**: Bandit LOW/MEDIUM/HIGH x confidence; Semgrep ERROR/WARNING/INFO (rule level);
+   Gitleaks none; pip-audit none. A common severity must be derived, not copied.
+
+## Process notes (disclosure)
+
+- First scan round: `wsgi.py` used `app.run(host="0.0.0.0", debug=True)`. Bandit (B104) and a Semgrep rule fired on
+  `host=`, not on `debug=True`, so P08 looked "detected" for the wrong reason. I changed the line to `app.run(debug=True)`
+  to make P08 a single unambiguous issue and re-ran all scanners. After that P08 was missed by every tool. The
+  first-round outputs were overwritten and are not kept. No other target line was changed after scanning started.
+- `expected_findings.yaml` was updated from these results. Semgrep means the primary `p/python` run there;
+  the P06 note records that the supplementary ruleset detects it.
+- pip-audit's transitive results, Semgrep registry rules and the 2026 CVE ids will drift over time; the committed
+  raw files are the frozen baseline.
+
+## Implications for later phases
+
+- Normalize on SARIF where available (Bandit, Semgrep, Gitleaks) plus a separate pip-audit JSON adapter that
+  synthesizes locations from `requirements.txt` lines.
+- The model needs: tool, rule id, normalized severity + confidence, location (optional for SCA), snippet (maskable),
+  raw payload reference, and a `duplicate_of` link (same issue reported by several rules/tools: P01 x3, P05 x4, P07 x3).
+- Evaluation must match by file + line-range overlap, and must treat P02 as one case reported on different lines by different tools.
+- Tool-only baseline on this target: 7/10 positives found, 4/6 negatives falsely flagged. That is the number the
+  agent layer has to improve, mostly by dismissing N02/N04/N05/N06 with evidence, never by deleting findings.
+- A "no network" sandbox conflicts with pip-audit and registry-based Semgrep. See `docs/SECURITY_POLICY.md` for how this is handled.

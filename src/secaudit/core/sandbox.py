@@ -24,6 +24,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
+from secaudit.core import exe
+
 NON_ROOT_USER = "10001:10001"
 MANAGED_LABEL = "org.secaudit.managed=true"
 SRC_TARGET = "/src"
@@ -238,7 +240,7 @@ def subprocess_runner(
     on_kill: Callable[[], None] | None = None,
 ) -> CommandOutcome:
     """Real process execution: argument list, no shell, stdin closed, bounded capture."""
-    proc = subprocess.Popen(  # noqa: S603 - argument list, no shell
+    proc = exe.popen(
         list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE
     )
     state: dict = {}
@@ -351,7 +353,7 @@ def run_container(
 def docker_available(docker: str = "docker") -> tuple[bool, str]:
     """(reachable, detail). Uses `docker info`; never raises."""
     try:
-        done = subprocess.run(  # noqa: S603 - fixed argv
+        done = exe.run(
             [docker, "info", "--format", "{{.ServerVersion}}"],
             capture_output=True, text=True, timeout=30, check=False, stdin=subprocess.DEVNULL,
         )  # fmt: skip

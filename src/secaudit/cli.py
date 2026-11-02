@@ -8,6 +8,7 @@ run; 3 input rejected by intake; 4 one or more tools failed/timed out; 5 environ
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -15,6 +16,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from secaudit import __version__
+from secaudit.core import exe
 from secaudit.core.intake import DEFAULT_LIMITS, IntakeError
 from secaudit.core.rules import DEFAULT_RULESETS, RulesError, update_rules
 from secaudit.core.sandbox import ResourceLimits, docker_available
@@ -136,7 +138,7 @@ def _cmd_build_images(args: argparse.Namespace) -> int:
             print(f"error: no Dockerfile in {context}", file=sys.stderr)
             return EXIT_ENV
         print(f"building {adapter.image} ...", flush=True)
-        done = subprocess.run(  # noqa: S603 - argument list, no shell
+        done = exe.run(
             ["docker", "build", "--quiet", "-t", adapter.image, str(context)],
             capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL,
         )  # fmt: skip
@@ -175,6 +177,9 @@ def _cmd_rules_update(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    # Defence in depth (review #1): ask Windows not to search the cwd for programs. The real
+    # protection is core.exe, which resolves every program to a trusted absolute path.
+    os.environ["NoDefaultCurrentDirectoryInExePath"] = "1"
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

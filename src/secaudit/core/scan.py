@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from secaudit import __version__
+from secaudit.core import exe
 from secaudit.core.executors import (
     DockerExecutor,
     NativeExecutor,
@@ -198,12 +199,15 @@ def run_scan(
         if executor.kind == "docker":
             preflight(options, adapters)
 
+        if os.path.exists(source):
+            exe.forbid(source)  # programs inside the scanned input are never run
         intake_result = intake(
             source,
             limits=options.limits,
             workspace_parent=temp_root / "ws",
             include_git=options.include_git,
         )
+        exe.forbid(intake_result.workspace)
         _write_policy_files(intake_result.workspace)
 
         audit_dir = options.out_root / audit_id

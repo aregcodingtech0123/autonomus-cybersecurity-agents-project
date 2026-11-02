@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import tempfile
 import time
 from pathlib import Path
 
+from secaudit.core import exe
 from secaudit.core.sandbox import (
     RULES_TARGET,
     SRC_TARGET,
@@ -119,9 +119,7 @@ class NativeExecutor:
         command: list[str],
         label: str,
     ) -> ExecOutcome:
-        executable = shutil.which(command[0])
-        if executable is None:
-            raise OSError(f"{command[0]!r} was not found on PATH (native runner)")
+        executable = exe.resolve(command[0])  # raises ExecutableNotFound (an OSError)
         cwd = prepared.src_dir if (prepared.src_dir and adapter.workdir == SRC_TARGET) else out_dir
         env = {
             k: os.environ[k]
@@ -132,7 +130,7 @@ class NativeExecutor:
         env.update({k: v for k, v in adapter.env.items() if k != "HOME"})
         started = time.monotonic()
         try:
-            done = subprocess.run(  # noqa: S603 - argument list, no shell
+            done = exe.run(
                 [executable, *command[1:]], cwd=cwd, env=env, stdin=subprocess.DEVNULL,
                 capture_output=True, timeout=self.timeout_s, check=False,
             )  # fmt: skip
@@ -151,7 +149,7 @@ class NativeExecutor:
 
 
 def image_exists(image: str, docker: str = "docker") -> bool:
-    done = subprocess.run(  # noqa: S603 - fixed argv
+    done = exe.run(
         [docker, "image", "inspect", image], capture_output=True, check=False,
         stdin=subprocess.DEVNULL,
     )  # fmt: skip
@@ -164,7 +162,7 @@ def list_managed_containers(name_filter: str = "", docker: str = "docker") -> li
     if name_filter:
         argv += ["--filter", f"name={name_filter}"]
     argv += ["--format", "{{.Names}}"]
-    done = subprocess.run(  # noqa: S603 - fixed argv
+    done = exe.run(
         argv, capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL
     )  # fmt: skip
     return [line for line in done.stdout.splitlines() if line.strip()]

@@ -248,7 +248,7 @@ def test_git_intake_removes_dot_git_and_scratch(ws_parent, monkeypatch, tmp_path
 
     monkeypatch.setattr(intake_mod, "_run_clone", fake_clone)
     monkeypatch.setattr(intake_mod, "_git_head", lambda repo, env: "a" * 40)
-    monkeypatch.setattr(intake_mod.shutil, "which", lambda name: "git")
+    monkeypatch.setattr(intake_mod.exe, "resolve", lambda name, **kw: "git")
     result = intake_git("https://github.com/o/r.git", workspace_parent=ws_parent)
     assert result.kind == "git"
     assert result.commit == "a" * 40
@@ -263,7 +263,7 @@ def test_git_clone_failure_is_typed_and_cleans_up(ws_parent, monkeypatch):
         raise IntakeError(Reason.GIT_CLONE_TIMEOUT, "slow")
 
     monkeypatch.setattr(intake_mod, "_run_clone", failing_clone)
-    monkeypatch.setattr(intake_mod.shutil, "which", lambda name: "git")
+    monkeypatch.setattr(intake_mod.exe, "resolve", lambda name, **kw: "git")
     with pytest.raises(IntakeError) as exc:
         intake_git("https://github.com/o/r.git", workspace_parent=ws_parent)
     assert exc.value.reason is Reason.GIT_CLONE_TIMEOUT
@@ -271,7 +271,10 @@ def test_git_clone_failure_is_typed_and_cleans_up(ws_parent, monkeypatch):
 
 
 def test_git_unavailable(ws_parent, monkeypatch):
-    monkeypatch.setattr(intake_mod.shutil, "which", lambda name: None)
+    def missing(name, **kw):
+        raise intake_mod.exe.ExecutableNotFound(name)
+
+    monkeypatch.setattr(intake_mod.exe, "resolve", missing)
     with pytest.raises(IntakeError) as exc:
         intake_git("https://github.com/o/r.git", workspace_parent=ws_parent)
     assert exc.value.reason is Reason.GIT_UNAVAILABLE

@@ -24,7 +24,13 @@ import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
+
+from secaudit.core import exe
+
+if TYPE_CHECKING:
+    from subprocess import Popen
 
 CHUNK = 64 * 1024
 MIB = 1024 * 1024
@@ -560,13 +566,11 @@ def _dir_size(path: Path, stop_above: int) -> int:
     return total
 
 
-def _kill_tree(proc: subprocess.Popen[bytes]) -> None:
+def _kill_tree(proc: Popen[bytes]) -> None:
     if proc.poll() is not None:
         return
     if os.name == "nt":
-        subprocess.run(  # noqa: S603 - fixed argv
-            ["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, check=False
-        )
+        exe.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, check=False)
     else:
         try:
             os.killpg(proc.pid, signal.SIGKILL)
@@ -582,7 +586,7 @@ def _run_clone(argv: list[str], env: dict[str, str], dest: Path, limits: IntakeL
         else {"start_new_session": True}
     )
     with tempfile.TemporaryFile() as err:
-        proc = subprocess.Popen(  # noqa: S603 - argument list, no shell
+        proc = exe.popen(
             argv, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err,
             **creation,
         )  # fmt: skip
@@ -615,8 +619,10 @@ def intake_git(
     workspace_parent: Path | None = None,
 ) -> IntakeResult:
     canonical = validate_git_url(url, limits)
-    if shutil.which("git") is None:
-        raise IntakeError(Reason.GIT_UNAVAILABLE, "git executable not found")
+    try:
+        exe.resolve("git")
+    except exe.ExecutableNotFound as exc:
+        raise IntakeError(Reason.GIT_UNAVAILABLE, "no trusted git executable found") from exc
     scratch = Path(tempfile.mkdtemp(prefix="secaudit-clone-"))
     workspace: Path | None = None
     try:
@@ -643,7 +649,7 @@ def intake_git(
 
 
 def _git_head(repo: Path, env: dict[str, str]) -> str | None:
-    result = subprocess.run(  # noqa: S603 - fixed argv
+    result = exe.run(
         ["git", "-C", str(repo), "rev-parse", "HEAD"],
         env=env, capture_output=True, text=True, timeout=30, check=False,
     )  # fmt: skip

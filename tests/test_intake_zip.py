@@ -143,23 +143,64 @@ def test_not_a_zip_rejected(tmp_path, ws_parent):
     reject(junk, ws_parent, Reason.INVALID_ARCHIVE)
 
 
-def test_lying_header_is_rejected_not_trusted(zip_factory, ws_parent):
-    """A header that understates the real size must never produce an oversized extraction."""
-    path = zip_factory([{"name": "a.txt", "data": b"A" * 5000}], compress=False)
+@pytest.mark.parametrize("compress", [False, True], ids=["stored", "deflated"])
+def test_lying_header_is_rejected_as_a_corrupt_archive(zip_factory, ws_parent, compress):
+    """A header that understates the real size can never yield an oversized extraction: zipfile
+    bounds the output by the declared size and its CRC check then fails, which we map to
+    INVALID_ARCHIVE. (The SIZE_MISMATCH tests below simulate a library that does not.)"""
+    path = zip_factory([{"name": "a.txt", "data": b"A" * 5000}], compress=compress)
     raw = bytearray(path.read_bytes())
-    # shrink the declared uncompressed size (local header @22, central directory @24) to 10 bytes
-    raw[raw.index(b"PK\x03\x04") + 22 : raw.index(b"PK\x03\x04") + 26] = (10).to_bytes(4, "little")
-    raw[raw.index(b"PK\x01\x02") + 24 : raw.index(b"PK\x01\x02") + 28] = (10).to_bytes(4, "little")
+    local, central = raw.index(b"PK\x03\x04"), raw.index(b"PK\x01\x02")
+    raw[local + 22 : local + 26] = (10).to_bytes(4, "little")  # local header: uncompressed size
+    raw[central + 24 : central + 28] = (10).to_bytes(4, "little")  # central directory: same
     path.write_bytes(bytes(raw))
-    with pytest.raises(IntakeError):
+    with pytest.raises(IntakeError) as exc:
         intake_zip(path, workspace_parent=ws_parent)
+    assert exc.value.reason is Reason.INVALID_ARCHIVE and "CRC" in exc.value.detail
     assert list(ws_parent.iterdir()) == []
 
 
-def test_dispatcher_routes_zip(zip_factory, ws_parent):
-    result = intake(zip_factory([OK]), workspace_parent=ws_parent)
-    assert result.kind == "zip"
-    assert intake  # imported symbol used
+class _FakeMember:
+    """Stands in for zipfile's member stream: delivers `payload` whatever size the header declared."""
+
+    def __init__(self, payload: bytes):
+        self._chunks = [payload, b""]
+
+    def read(self, n=-1):
+        return self._chunks.pop(0) if self._chunks else b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.mark.parametrize(
+    ("delivered", "case"), [(b"x" * 20, "grows past"), (b"xx", "shrinks below")]
+)
+def test_size_mismatch_branch_is_exercised_by_simulating_a_misbehaving_library(
+    zip_factory, ws_parent, monkeypatch, delivered, case
+):
+    """Real archives cannot reach SIZE_MISMATCH (zipfile bounds output by the declared size and
+    raises on short data), so this defence-in-depth branch is driven by simulation: a 10-byte
+    entry whose stream delivers `delivered` instead."""
+    path = zip_factory([{"name": "a.txt", "data": b"0123456789"}])
+    monkeypatch.setattr(zipfile.ZipFile, "open", lambda self, info, *a, **k: _FakeMember(delivered))
+    with pytest.raises(IntakeError) as exc:
+        intake_zip(path, workspace_parent=ws_parent)
+    monkeypatch.undo()
+    assert exc.value.reason is Reason.SIZE_MISMATCH, case
+    assert list(ws_parent.iterdir()) == []
+
+
+def test_dispatcher_routes_zip_and_extracts_the_real_contents(zip_factory, ws_parent):
+    result = intake(
+        zip_factory([OK, {"name": "docs/n.md", "data": b"# n"}]), workspace_parent=ws_parent
+    )
+    assert result.kind == "zip" and result.file_count == 2
+    assert (result.workspace / "pkg" / "app.py").read_bytes() == OK["data"]
+    assert (result.workspace / "docs" / "n.md").read_bytes() == b"# n"
 
 
 def test_dispatcher_rejects_non_zip_file(tmp_path, ws_parent):

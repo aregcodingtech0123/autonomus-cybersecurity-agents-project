@@ -110,3 +110,15 @@ unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / docu
   Before: `2 failed` (`KeyError: 'limitations'`). After: `4 passed` in the file.
 - Verified while at it (`coverage_probe.py`): Bandit omits an unparsable file with no notice; Semgrep skips a >1 MB file with no notice but reports
   parse errors as notifications; Gitleaks skips binary files. All four adapters now declare `limitations`, copied into every tool's manifest entry.
+
+### Tests that did not prove what their names claim - FIXED (T9)
+| Review item | Change | Evidence |
+|---|---|---|
+| Stubbed symlink tests; real-symlink test skipped here | New `tests/test_intake_real_links.py`: real NTFS junctions (escaping -> `symlink_escape`, internal -> skipped) on Windows; real symlinks (absolute, relative, directory, dangling, loop), FIFO, char device and unix socket in a Linux container | `11 passed`. First time the symlink/special-file logic runs against real links; the stub tests remain as fast unit tests. The old real-symlink test is kept for hosts that may create symlinks. |
+| `test_lying_header...` accepted any error | Parametrised stored/deflated, asserts exactly `INVALID_ARCHIVE` with a CRC message | observed reason first (`Bad CRC-32`), then pinned |
+| `SIZE_MISMATCH` never exercised | Two simulation tests (stream grows past / shrinks below the declared size); real archives cannot reach the branch because zipfile bounds output by the declared size | mutation check: with both branches disabled `2 failed`, restored `2 passed` |
+| Policy test checked only the root file | Five variants: root file, nested file, deeply nested file, root directory, nested directory; asserts the container is handed exactly one neutral `.semgrepignore` | plus the 28-case docker matrix from T2 |
+| `assert intake` / `assert DockerExecutor` filler | Dispatcher test asserts extracted contents; ZIP round trip asserts archive SHA-256, file count 15 and that Bandit analysed `webshop/db.py` | - |
+| Cleanup test Windows-only | Linux-container two-user scenarios (T4) + orchestration tests proving a `CleanupError` is raised after the audit is written and never masks the real error (`__notes__`) | `test_a_cleanup_failure_*` |
+| Egress test overclaimed | Renamed, residual risk pinned separately (T8) | - |
+- Full suite after T9: `352 passed, 2 skipped` (symlink-on-Windows and opt-in network), 0 labelled containers left.

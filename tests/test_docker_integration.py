@@ -5,6 +5,7 @@ Never skipped silently: see tests/conftest.py (explicit skip reason + loud summa
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -17,7 +18,7 @@ import yaml
 
 from hits import overlaps, tool_hits
 from secaudit import cli
-from secaudit.core.executors import DockerExecutor, list_managed_containers
+from secaudit.core.executors import list_managed_containers
 from secaudit.core.rules import RulesError, load_rules_cache
 from secaudit.core.sandbox import (
     ContainerSpec,
@@ -402,5 +403,15 @@ def test_zip_input_round_trips_through_the_sandbox(tmp_path, rules_cache):
     archive = shutil.make_archive(str(tmp_path / "target"), "zip", TARGET)
     options = ScanOptions(out_root=tmp_path / "audits", tools=("bandit", "gitleaks"))
     outcome = run_scan(archive, options, rules=rules_cache)
-    assert outcome.tools_ok and outcome.manifest["input"]["kind"] == "zip"
-    assert DockerExecutor  # imported for completeness of the public surface
+    manifest = outcome.manifest
+    assert outcome.tools_ok and manifest["input"]["kind"] == "zip"
+    assert manifest["input"]["sha256"] == hashlib.sha256(Path(archive).read_bytes()).hexdigest()
+    assert manifest["input"]["file_count"] == 15, "every file of the benchmark target arrived"
+    sarif = json.loads(
+        (outcome.audit_dir / manifest["tools"]["bandit"]["artifact"]).read_text(encoding="utf-8")
+    )
+    analysed = {
+        r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        for r in sarif["runs"][0]["results"]
+    }
+    assert "webshop/db.py" in analysed, "the sandboxed Bandit analysed the extracted code"

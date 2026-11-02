@@ -109,20 +109,78 @@ def test_intake_rejection_raises_and_leaves_nothing(tmp_path, sys_tmp):
     assert not (tmp_path / "audits").exists()
 
 
-def test_scan_scope_policy_cannot_be_overridden_by_scanned_code(project, tmp_path, sys_tmp):
-    (project / SEMGREPIGNORE_NAME).write_bytes(b"*\n")  # hostile: ignore everything
+@pytest.mark.parametrize(
+    "hostile",
+    ["root-file", "nested-file", "deeply-nested-file", "root-directory", "nested-directory"],
+)
+def test_scan_scope_policy_cannot_be_overridden_by_scanned_code(
+    project, tmp_path, sys_tmp, hostile
+):
+    """What the Semgrep container is handed: exactly one neutral .semgrepignore, at the root only."""
+    if hostile == "root-file":
+        (project / SEMGREPIGNORE_NAME).write_bytes(b"*\n")
+    elif hostile == "nested-file":
+        (project / "pkg").mkdir()
+        (project / "pkg" / SEMGREPIGNORE_NAME).write_bytes(b"*.py\n")
+    elif hostile == "deeply-nested-file":
+        (project / "a" / "b" / "c").mkdir(parents=True)
+        (project / "a" / "b" / "c" / SEMGREPIGNORE_NAME).write_bytes(b"*\n")
+    elif hostile == "root-directory":
+        (project / SEMGREPIGNORE_NAME).mkdir()
+        (project / SEMGREPIGNORE_NAME / "keep.txt").write_bytes(b"x")
+    else:
+        (project / "pkg" / SEMGREPIGNORE_NAME).mkdir(parents=True)
     executor = FakeExecutor()
     seen = {}
     original = executor.run
 
     def spy(adapter, prepared, out_dir, command, label):
         if adapter.name == "semgrep" and prepared.src_dir:
+            seen["found"] = sorted(
+                p.relative_to(prepared.src_dir).as_posix()
+                for p in prepared.src_dir.rglob("*")
+                if p.name.casefold() == SEMGREPIGNORE_NAME
+            )
             seen["body"] = (prepared.src_dir / SEMGREPIGNORE_NAME).read_text(encoding="utf-8")
         return original(adapter, prepared, out_dir, command, label)
 
     executor.run = spy
-    scan(project, tmp_path, fake_rules(tmp_path), executor, tools=("semgrep",))
+    outcome = scan(project, tmp_path, fake_rules(tmp_path), executor, tools=("semgrep",))
+    assert seen["found"] == [SEMGREPIGNORE_NAME], (
+        "no nested or directory-named policy file survives"
+    )
     assert seen["body"] == SEMGREPIGNORE_BODY
+    assert outcome.manifest["tools"]["semgrep"]["status"] == "completed"
+
+
+def test_a_cleanup_failure_is_raised_loudly_after_the_audit_is_written(
+    project, tmp_path, sys_tmp, monkeypatch
+):
+    from secaudit.core import scan as scan_mod
+    from secaudit.core.intake import CleanupError
+
+    def failing_remove(path):
+        raise CleanupError("could not remove 1 item(s) under X: leftover.bin")
+
+    monkeypatch.setattr(scan_mod, "remove_tree", failing_remove)
+    with pytest.raises(CleanupError, match="leftover.bin"):
+        scan(project, tmp_path, fake_rules(tmp_path), FakeExecutor(), tools=("bandit",))
+    audits = list((tmp_path / "audits").iterdir())
+    assert len(audits) == 1 and (audits[0] / "manifest.json").is_file(), "the audit itself is kept"
+
+
+def test_a_cleanup_failure_never_masks_the_real_error(project, tmp_path, sys_tmp, monkeypatch):
+    from secaudit.core import scan as scan_mod
+    from secaudit.core.intake import CleanupError
+
+    def failing_remove(path):
+        raise CleanupError("stuck files")
+
+    monkeypatch.setattr(scan_mod, "remove_tree", failing_remove)
+    with pytest.raises(IntakeError) as exc:
+        scan(tmp_path / "does-not-exist", tmp_path, fake_rules(tmp_path), FakeExecutor())
+    assert exc.value.reason is Reason.INPUT_NOT_FOUND
+    assert any("stuck files" in note for note in exc.value.__notes__)
 
 
 def test_tool_subset_runs_only_requested_tools(project, tmp_path, sys_tmp):

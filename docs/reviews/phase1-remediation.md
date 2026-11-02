@@ -74,3 +74,13 @@ unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / docu
   (`SECAUDIT_LOG_DIR` overrides), `--debug` (before or after the subcommand) prints it. Input-caused failures stay typed (exit 3);
   an internal bug exits 1. Deviation: the task text asked for exit code 3 for everything; reporting a bug as "input rejected" would mislead.
 - After: `10 passed`; full non-docker suite `266 passed, 2 skipped`.
+
+### #8 Resource exhaustion before limits apply - FIXED
+- Tests: `tests/test_intake_limits.py` (7 cases): archive size limit enforced before hashing/parsing (tripwires on `_hash_file` and
+  `zipfile.ZipFile`), EOCD entry count and central-directory size checked before the ZipFile is built, directories count toward the limit,
+  real 300,000-entry ZIP (also exercises ZIP64) under a 3 s / 64 MB budget, 5,000 empty directories with `max_files=100`.
+- Before (unfixed code): `5 failed, 2 passed`; `rejection took 10.47s (was 9.79s)`; tripwires hit (hashed/parsed first); the directory flood was accepted.
+- Fix: `IntakeLimits.max_archive_bytes` (128 MiB, `Reason.ARCHIVE_TOO_LARGE`), `_read_eocd` reads only the last 66 KiB (incl. ZIP64 locator),
+  entries > `max_files` or central directory > `max_files * 1024` bytes are rejected before any parsing; `_Budget` counts files AND directories
+  (`file_count` in the result still reports files only).
+- After: `7 passed`. Measured: 300,000-entry ZIP rejected in 0.011 s with 0.1 MB peak Python heap (before: 9.79 s / 168 MB).

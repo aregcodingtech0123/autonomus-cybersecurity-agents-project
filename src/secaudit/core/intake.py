@@ -18,6 +18,7 @@ import re
 import shutil
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -62,6 +63,7 @@ class Reason(enum.StrEnum):
     COMPRESSION_RATIO_EXCEEDED = "compression_ratio_exceeded"
     SIZE_MISMATCH = "size_mismatch"
     IO_ERROR = "io_error"
+    ARCHIVE_TOO_LARGE = "archive_too_large"
     HARDLINK = "hardlink"
     CHANGED_DURING_INTAKE = "changed_during_intake"
     GIT_URL_SCHEME = "git_url_scheme"
@@ -87,7 +89,8 @@ class IntakeError(Exception):
 class IntakeLimits:
     """Configurable safety limits. Defaults are documented in docs/SECURITY_POLICY.md."""
 
-    max_files: int = 10_000
+    max_files: int = 10_000  # files AND directories
+    max_archive_bytes: int = 128 * MIB  # size of the ZIP file itself, checked before opening it
     max_total_bytes: int = 256 * MIB
     max_file_bytes: int = 64 * MIB
     max_compression_ratio: float = 100.0
@@ -254,13 +257,23 @@ class _Budget:
 
     def __init__(self, limits: IntakeLimits) -> None:
         self.limits = limits
-        self.files = 0
+        self.files = 0  # regular files (reported in the result)
+        self.entries = 0  # files + directories (what the limit applies to)
         self.total = 0
+
+    def _count_entry(self) -> None:
+        self.entries += 1
+        if self.entries > self.limits.max_files:
+            raise IntakeError(
+                Reason.TOO_MANY_FILES, f"more than {self.limits.max_files} files and directories"
+            )
 
     def add_file(self) -> None:
         self.files += 1
-        if self.files > self.limits.max_files:
-            raise IntakeError(Reason.TOO_MANY_FILES, f"more than {self.limits.max_files} files")
+        self._count_entry()
+
+    def add_dir(self) -> None:
+        self._count_entry()
 
     def add_bytes(self, n: int, file_total: int) -> None:
         self.total += n
@@ -343,6 +356,7 @@ def _copy_tree(
             continue
         mode = entry.stat(follow_symlinks=False).st_mode
         if stat.S_ISDIR(mode):
+            budget.add_dir()
             target.mkdir(parents=True, exist_ok=True)
             _chmod_public(target, is_dir=True)
         elif stat.S_ISREG(mode):
@@ -488,6 +502,14 @@ def intake_zip(
     if not archive.is_file():
         raise IntakeError(Reason.INPUT_NOT_FOUND, f"not a file: {archive.name}")
     with _io_guard():
+        # Cheap checks first: file size, then the end-of-central-directory record. Only then hash
+        # or parse (review: 9.8 s / 168 MB were spent before a 300,000-entry ZIP was refused).
+        size = archive.stat().st_size
+        if size > limits.max_archive_bytes:
+            raise IntakeError(
+                Reason.ARCHIVE_TOO_LARGE, f"archive is larger than {limits.max_archive_bytes} bytes"
+            )
+        _precheck_zip_directory(archive, size, limits)
         input_sha = _hash_file(archive)
         workspace = _make_workspace(workspace_parent)
     try:
@@ -497,6 +519,54 @@ def intake_zip(
         _discard(workspace, exc)
         raise
     return IntakeResult(workspace, "zip", input_sha, files, total)
+
+
+_EOCD = struct.Struct("<4sHHHHIIH")  # end of central directory record, 22 bytes
+_EOCD64_LOCATOR = struct.Struct("<4sIQI")
+_EOCD64 = struct.Struct("<4sQHHIIQQQQ")
+CENTRAL_DIR_BYTES_PER_ENTRY = 1024  # generous: a 240-char name needs ~290 bytes
+
+
+def _read_eocd(path: Path, size: int) -> tuple[int, int]:
+    """Return (entry_count, central_directory_bytes) from the archive's tail without parsing it."""
+    tail_len = min(size, 66 * 1024)
+    with path.open("rb") as handle:
+        handle.seek(size - tail_len)
+        tail = handle.read(tail_len)
+        at = tail.rfind(b"PK\x05\x06")
+        if at < 0 or at + _EOCD.size > len(tail):
+            raise IntakeError(
+                Reason.INVALID_ARCHIVE, "not a readable ZIP: no end-of-directory record"
+            )
+        _sig, _disk, _cd_disk, _n_disk, entries, cd_size, cd_offset, _comment = _EOCD.unpack_from(
+            tail, at
+        )
+        zip64 = entries == 0xFFFF or cd_size == 0xFFFFFFFF or cd_offset == 0xFFFFFFFF
+        if zip64:
+            loc_at = at - _EOCD64_LOCATOR.size
+            if loc_at < 0 or tail[loc_at : loc_at + 4] != b"PK\x06\x07":
+                raise IntakeError(
+                    Reason.INVALID_ARCHIVE, "not a readable ZIP: missing ZIP64 locator"
+                )
+            _s, _d, eocd64_offset, _n = _EOCD64_LOCATOR.unpack_from(tail, loc_at)
+            if eocd64_offset + _EOCD64.size > size:
+                raise IntakeError(Reason.INVALID_ARCHIVE, "not a readable ZIP: bad ZIP64 offset")
+            handle.seek(eocd64_offset)
+            record = handle.read(_EOCD64.size)
+            if len(record) < _EOCD64.size or record[:4] != b"PK\x06\x06":
+                raise IntakeError(Reason.INVALID_ARCHIVE, "not a readable ZIP: bad ZIP64 record")
+            fields = _EOCD64.unpack(record)
+            entries, cd_size = fields[7], fields[8]
+    return entries, cd_size
+
+
+def _precheck_zip_directory(archive: Path, size: int, limits: IntakeLimits) -> None:
+    entries, cd_size = _read_eocd(archive, size)
+    if entries > limits.max_files:
+        raise IntakeError(Reason.TOO_MANY_FILES, f"{entries} entries in archive")
+    if cd_size > limits.max_files * CENTRAL_DIR_BYTES_PER_ENTRY:
+        # The entry count in the record can understate the real number; the directory size cannot.
+        raise IntakeError(Reason.TOO_MANY_FILES, "central directory is unreasonably large")
 
 
 def _extract_zip(archive: Path, workspace: Path, limits: IntakeLimits) -> tuple[int, int]:
@@ -548,6 +618,7 @@ def _extract_zip(archive: Path, workspace: Path, limits: IntakeLimits) -> tuple[
             if not _within(str(workspace), str(target.parent)):
                 raise IntakeError(Reason.PARENT_TRAVERSAL, f"{info.filename[:60]!r}")
             if is_dir:
+                budget.add_dir()
                 target.mkdir(parents=True, exist_ok=True)
                 _chmod_public(target, is_dir=True)
                 continue

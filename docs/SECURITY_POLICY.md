@@ -47,21 +47,27 @@ Every rejection raises `IntakeError` with a stable reason code. Defaults (all co
 
 | Limit | Default |
 |---|---|
-| Files per input | 10,000 |
+| Files **and directories** per input | 10,000 |
+| ZIP file size (checked before opening or hashing) | 128 MiB |
 | Total uncompressed bytes | 256 MiB |
 | Single file | 64 MiB |
 | Compression ratio (entries/archives >= 1 MiB) | 100 : 1 |
-| Path length | 240 characters |
+| Entry name length / component / joined path | 240 chars / 255 bytes / 259 on Windows, 4095 on POSIX |
 | Git clone wall clock / size | 120 s / 256 MiB |
 | Git hosts (https only) | github.com, gitlab.com, bitbucket.org, codeberg.org |
 
 - **Directories:** copied entry by entry without following links. Symlinks that escape the root reject the input;
-  internal symlinks are skipped (never recreated); devices, sockets and FIFOs reject the input; `.git` is excluded
-  unless `--include-git`. Files are opened with `O_NOFOLLOW` and re-checked after opening.
+  internal symlinks are skipped (never recreated); devices, sockets and FIFOs reject the input; files with more than
+  one hard link reject the input (`hardlink`); `.git` is excluded unless `--include-git`. Files are opened with
+  `O_NOFOLLOW` and re-checked after opening (type, hard-link count, and `st_dev`/`st_ino` against an earlier `lstat`).
+  Every filesystem error becomes a typed `IntakeError` (`io_error`) without host paths.
 - **ZIP:** manual per-entry extraction (never `extractall`). Rejects absolute paths, `..`, backslashes, drive
-  letters, NTFS streams, reserved device names, control characters, symlink/special entries, encrypted entries,
+  letters, NTFS streams, reserved device names (NFKC-folded, incl. `CONIN$`/`CONOUT$`/`COM0-9`/`LPT0-9`), characters
+  invalid on Windows (`<>"|?*`), control characters, symlink/special entries, encrypted entries,
   nested archives (by extension and magic bytes), duplicate or case/Unicode-colliding names, lying size headers,
-  and anything exceeding the limits above (checked on declared and on actually written bytes).
+  and anything exceeding the limits above (checked on declared and on actually written bytes). The archive size, the
+  entry count and the central-directory size are checked from the end-of-central-directory record BEFORE the archive
+  is hashed or parsed.
 - **Git URL:** `https://` only, host allow-list, no credentials, no IP literals, default port only, no query/fragment.
   `git clone --depth 1 --single-branch --no-tags --no-recurse-submodules` with hooks directed to an empty directory,
   `protocol.file.allow=never`, `core.symlinks=false`, `http.followRedirects=false`, `GIT_TERMINAL_PROMPT=0`, no

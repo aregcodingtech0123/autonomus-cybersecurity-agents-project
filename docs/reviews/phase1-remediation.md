@@ -4,7 +4,50 @@ Every row: reproduce with a failing regression test, fix, show it passing. "Befo
 unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / documented / deferred / unverified.
 
 ## Summary table
-(filled in as each task lands; final table at the end)
+
+| # | Finding | Status | Regression test (examples) | Evidence |
+|---|---|---|---|---|
+| 1 | cwd executable hijack (Windows) | **fixed** | `test_exe.py::test_planted_docker_and_git_in_cwd_are_never_executed`, resolver tests, AST guard | before: planted `docker.exe` ran -> `(False, 'docker info failed')`; after: real Docker answers, planted git/bandit refused |
+| 2 | `.bandit` disables Bandit | **fixed** | `test_scanner_neutralization.py[bandit-root/-nested/-dir-named]` | 1 and 13 results -> 16 |
+| 3 | nested `.semgrepignore` hides Semgrep findings | **fixed** | `[semgrepignore-nested/-root-dir/-in-tests]`, policy test x5 | 1 result -> 11; dir-named no longer aborts the scan |
+| 3+ | **new:** `.gitleaksignore` hides all Gitleaks findings | **fixed** | `[gitleaksignore-root/-nested]` | 0 -> 3 results |
+| 4 | "no raw secrets on disk" false | **fixed (docs + permissions)** | `test_secret_literals_appear_only_in_documented_raw_files`, `test_posix_audit_directory_and_raw_files_are_private` | Bandit output proven secret-bearing; POSIX `0700/0600`; Windows ACLs **not done** |
+| 5 | cleanup chmods through symlink / leaves files | **fixed** | `test_cleanup_and_user.py` (4 Linux-container tests) | victim `0o700` -> `0o600` kept; leftovers -> `CleanupError`; **new:** read-only trees were never removed before |
+| 6 | hardlinks | **fixed** | `test_hardlink_*` (Windows `os.link` + Linux) | accepted -> `hardlink` |
+| 7 | untyped errors, tracebacks, host paths | **fixed** | `test_intake_hardening.py`, `test_cli_errors.py` | 6 crashes + long path + dir `.semgrepignore` -> typed; CLI prints one line, `--debug` opt-in |
+| 8 | exhaustion before limits | **fixed** | `test_intake_limits.py` | 9.79 s / 168 MB -> 0.011 s / 0.1 MB; 5,000 dirs rejected |
+| 9 | egress reaches Docker host side | **documented** (no mitigation demonstrable) | `test_KNOWN_RESIDUAL_RISK_...` | 4 network variants measured; none closes it |
+| 10 | Gitleaks default path allowlist | **documented** | `test_manifest_declares_per_tool_limitations` | `limitations` in every tool's manifest entry |
+| 11 | reserved device names | **fixed** | `test_reserved_windows_device_names_are_rejected` (14) | 6 variants accepted -> rejected |
+| 12 | TOCTOU | **mitigated** (identity check) | `test_file_swapped_between_check_and_open_is_detected` | Windows residual (no `O_NOFOLLOW`, parent junctions) documented, not eliminated |
+| 13 | no deadline inside container | **fixed** | `test_container_deadline.py` | orphan alive 25 s after parent kill -> reaped / self-terminates |
+| T | tests that overclaimed | **fixed** | `test_intake_real_links.py`, SIZE_MISMATCH simulation (mutation-checked), policy x5, filler removed | see section below |
+
+Deviations: CLI exit code for internal bugs is 1 (typed input rejections stay 3); exit code 6 added for cleanup failure;
+`SIZE_MISMATCH` is tested by simulation; Windows file-permission hardening not implemented; #9 not mitigated.
+
+## Review probes: before / after
+
+| Probe (from the review) | Before | After |
+|---|---|---|
+| junction escaping the input | rejected | rejected (`symlink_escape`) |
+| hardlink to outside file | ACCEPTED, content copied | `hardlink` |
+| ZIP names with `? < > \| " *` | untyped `OSError` x6 | `unsafe_name` x6 |
+| 237-char entry (MAX_PATH) | untyped `FileNotFoundError` | `unsafe_name` |
+| `CONIN$`, `CONOUT$`, COM-superscript, `LPT`-superscript, `CON .txt`, `AUX .py` | ACCEPTED x6 | `unsafe_name` x6 |
+| `.semgrepignore/` directory | `PermissionError`, whole audit aborted | neutralized, scan continues |
+| 300,000-entry ZIP | 9.79 s, 168 MB | 0.011 s, ~0 MB |
+| `.bandit` (root / nested) | 1 / 13 of 16 results | 16 / 16 |
+| nested `.semgrepignore` | 1 of 11 | 11 |
+| `.gitleaksignore` (new) | 0 of 3 | 3 |
+| planted `docker.exe` in cwd | planted binary ran | real Docker used |
+| orphan after killed parent | still running after 25 s | reaped / self-terminates |
+| Gitleaks path-allowlist (node_modules, go.sum, svg) | 3 (key not found) | 3 (**unchanged, declared limitation**) |
+
+Benchmark unchanged: a fresh container scan matches `benchmarks/baseline/raw/` at rule/file/line level (Bandit 16, Semgrep 11,
+Gitleaks 3) and reports the same vulnerable pins for pip-audit (Flask 2.0.1, PyYAML 5.3.1, requests 2.19.0).
+Observed side effect, not attributed: per-container durations were noisier/higher in the final run (3-4 s vs ~1 s); the same
+plain `docker run` varied between 1.4 s and 6.3 s in a direct measurement, so the `timeout` wrapper is not shown to be the cause.
 
 ## Evidence
 

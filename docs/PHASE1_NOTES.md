@@ -68,6 +68,20 @@ rejected, `4` a tool failed/timed out, `5` environment (Docker down, images or r
 | Leftover workspaces / containers | cleanup in `finally` plus a name-prefix container sweep | `test_workspace_is_always_cleaned_up`, `test_workspace_and_containers_are_cleaned_up` (docker) |
 | Unsafe native execution | refuses without `--i-trust-this-code` | `test_native_runner_refuses_without_trust_flag` |
 | Local paths leaking into the manifest | host paths replaced by placeholders; POSIX-relative artifact paths | `test_manifest_and_raw_outputs` |
+| **Remediation rows (adversarial review)** | | |
+| Planted `docker.exe`/`git.exe`/tool in the cwd or the scanned input runs on the host (#1) | `core/exe.py` resolves every program to a trusted absolute path (no cwd, relative/empty PATH entries or untrusted roots; `.exe/.com` only; `taskkill` from System32); only `exe.run/popen` may spawn; CLI sets `NoDefaultCurrentDirectoryInExePath` | `tests/test_exe.py::test_planted_docker_and_git_in_cwd_are_never_executed`, `test_no_subprocess_calls_outside_exe_module`, resolver unit tests |
+| `.bandit` / nested or directory-named `.semgrepignore` / `.gitleaksignore` / `.gitleaks.toml` hide findings or abort the scan (#2, #3) | `core/neutralize.py` deletes them at any depth (files or directories), replaces the root `.semgrepignore`; `manifest.neutralized_files` | `tests/test_scanner_neutralization.py` (28 docker cases), `tests/test_neutralize.py`, `test_scan_scope_policy_cannot_be_overridden_by_scanned_code` |
+| `git` mode tricks (`.git`, `.gitignore`) | no `git` binary in any image | `test_images_contain_no_git_so_git_mode_cannot_activate` |
+| Raw outputs treated as secret-free (#4) | documented as secret-bearing; POSIX `0700/0600`; manifest/CLI secret-free; hashes unchanged | `test_secret_literals_appear_only_in_documented_raw_files`, `test_posix_audit_directory_and_raw_files_are_private`, `test_raw_files_are_byte_identical_to_what_the_manifest_hashes` |
+| Cleanup chmods through a symlink, leaves read-only trees, hides failures (#5) | symlink-safe `remove_tree`, directories made deletable, `CleanupError` after the manifest, never masks the real error; containers run as host uid on POSIX; exit code 6 | `tests/test_cleanup_and_user.py::TestCleanupInLinux`, `test_a_cleanup_failure_is_raised_loudly_after_the_audit_is_written`, `test_a_cleanup_failure_never_masks_the_real_error` |
+| Hardlink pulls an outside file into the workspace, or hides a repo file (#6) | `fstat().st_nlink > 1` -> `HARDLINK` (reject, never skip) | `test_hardlink_to_a_file_outside_the_input_is_rejected`, `test_two_hardlinked_files_inside_the_input_are_rejected_not_silently_hidden`, `test_hardlink_rejected_on_linux_too` |
+| Untyped crashes from Windows-invalid names, MAX_PATH, I/O errors; tracebacks and host paths on the terminal (#7) | `<>"\|?*` and >255-byte components rejected; joined path length checked first; `_io_guard` types every OSError; CLI catch-all logs to a file, `--debug` opts in | `test_windows_invalid_characters_are_a_typed_rejection`, `test_entry_that_exceeds_windows_max_path_once_joined_is_rejected`, `test_any_oserror_during_*`, `tests/test_cli_errors.py` |
+| Resource exhaustion before limits apply (#8) | `max_archive_bytes` by `stat`; entry count + central-directory size from the EOCD (incl. ZIP64) before parsing; directories count | `tests/test_intake_limits.py` (300,000 entries: 9.79 s / 168 MB -> 0.011 s / 0.1 MB) |
+| Reserved device names slip through (#11) | NFKC fold, strip trailing spaces/dots, `CONIN$/CONOUT$/COM0-9/LPT0-9` | `test_reserved_windows_device_names_are_rejected` (14 variants) |
+| Check-to-open race (#12) | `lstat` vs `fstat` identity (`st_dev`, `st_ino`); residual documented | `test_file_swapped_between_check_and_open_is_detected` |
+| Orphan container after a killed secaudit (#13) | in-container `timeout -k 5 <timeout_s+10>`; owner-pid/start labels; `reap_stale_containers()` | `tests/test_container_deadline.py` (4 docker tests incl. hard-killed parent) |
+| Egress network reaches the Docker host side (#9) | NOT mitigated (no flag demonstrated to help); declared residual risk | `test_KNOWN_RESIDUAL_RISK_egress_network_can_reach_the_docker_host_side` |
+| Undeclared coverage gaps (#10) | per-tool `limitations` in the manifest (Gitleaks path allowlist, Bandit unparsable files, Semgrep >1 MB, pip-audit pins) | `test_manifest_declares_per_tool_limitations` |
 
 ## Scanner neutralization matrix (remediation of review #2/#3)
 
@@ -208,8 +222,9 @@ container simulating two users; behaviour on real Linux/macOS hosts is unverifie
   caps apply, so a pathological input could still fill the host disk until the timeout.
 - **Defaults otherwise:** Docker's default seccomp/AppArmor profiles apply (not weakened, not strengthened);
   no gVisor/rootless; containers share the host kernel. Base images may contain unpatched OS packages.
-- **Windows-tested only.** POSIX permission handling (workspace `0o755/0o644`, output dir `0o777`) is written
-  but untested; real symlink/FIFO intake tests skip on this account (stubs cover the logic).
+- **Windows host only.** POSIX behaviour (symlinks, FIFOs, devices, hard links, file modes, multi-user cleanup) is tested
+  in a Linux container via `tests/linux_probe.py`, not on a real Linux/macOS host. `--user <host uid>` and
+  `NoDefaultCurrentDirectoryInExePath` outside Windows are unverified. No permission hardening exists on Windows.
 - **Git intake needs a `git` executable on the host** and an allow-listed host (default: github.com,
   gitlab.com, bitbucket.org, codeberg.org; extend with `--allow-git-host`).
 - **Not done:** image signature/attestation verification, SBOMs, vulnerability scanning of our own images.

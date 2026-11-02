@@ -57,6 +57,9 @@ def output_dir_mode(*, os_name: str | None = None, uid: int | None = None) -> in
 
 
 MANAGED_LABEL = "org.secaudit.managed=true"
+OWNER_PID_LABEL = "org.secaudit.owner-pid"
+STARTED_LABEL = "org.secaudit.started"
+INNER_TIMEOUT_GRACE_S = 10  # the in-container deadline is the host timeout plus this
 SRC_TARGET = "/src"
 RULES_TARGET = "/rules"
 OUT_TARGET = "/out"
@@ -219,6 +222,8 @@ def build_docker_command(spec: ContainerSpec, docker: str = "docker") -> list[st
         "--pull", "never",
         "--name", spec.name,
         "--label", MANAGED_LABEL,
+        "--label", f"{OWNER_PID_LABEL}={os.getpid()}",
+        "--label", f"{STARTED_LABEL}={int(time.time())}",
         "--network", spec.network.value,
         "--read-only",
         "--tmpfs", f"/tmp:rw,noexec,nosuid,size={limits.tmpfs_size}",
@@ -237,7 +242,10 @@ def build_docker_command(spec: ContainerSpec, docker: str = "docker") -> list[st
     argv += ["--mount", f"type=bind,source={out_text},target={OUT_TARGET}"]
     for key in sorted(spec.env):
         argv += ["--env", f"{key}={spec.env[key]}"]
-    argv += [spec.image, *spec.command]
+    # Deadline INSIDE the container (review #13): if secaudit itself is SIGKILLed, the host-side
+    # timeout and `docker kill` never run, so coreutils `timeout` bounds the tool by itself.
+    inner = int(limits.timeout_s) + INNER_TIMEOUT_GRACE_S
+    argv += [spec.image, "timeout", "-k", "5", str(inner), *spec.command]
     return argv
 
 

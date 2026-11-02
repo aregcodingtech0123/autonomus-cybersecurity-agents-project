@@ -84,3 +84,15 @@ unfixed code; "After" = same test on the fix. Statuses: fixed / mitigated / docu
   entries > `max_files` or central directory > `max_files * 1024` bytes are rejected before any parsing; `_Budget` counts files AND directories
   (`file_count` in the result still reports files only).
 - After: `7 passed`. Measured: 300,000-entry ZIP rejected in 0.011 s with 0.1 MB peak Python heap (before: 9.79 s / 168 MB).
+
+### #13 No deadline inside the container / orphans after a killed parent - FIXED
+- Tests: `tests/test_container_deadline.py` (builder wrapper + labels, `pid_alive`, and four real-container tests; `docker` marker) and the
+  updated layout assertion in `tests/test_sandbox_command.py`.
+- Before (behavioural, unfixed code): a child process started a container with `timeout_s=3`, was hard-killed, and 25 s later
+  `orphan still running ... : True`. New tests failed at collection (`cannot import name 'pid_alive'`).
+- Fix: the container command is wrapped in coreutils `timeout -k 5 <timeout_s+10>` (present in all four images, verified); containers carry
+  `org.secaudit.owner-pid` / `org.secaudit.started` labels; `reap_stale_containers()` (run by `preflight` and `rules update`) removes labelled
+  containers whose owner pid is dead (posix `kill(pid,0)`, Windows `OpenProcess`) or older than 24 h (guards pid reuse).
+- After: `27 passed` for the two files; full suite `329 passed, 2 skipped`, 0 labelled containers left. Killed-parent evidence: the orphan
+  survives `Popen.kill()` of its parent (precondition asserted), is removed by the reaper, and a separate orphan exits on its own within 60 s.
+- Not covered: the 24 h age cap and the Windows `OpenProcess` access-denied branch are reasoned, not exercised.

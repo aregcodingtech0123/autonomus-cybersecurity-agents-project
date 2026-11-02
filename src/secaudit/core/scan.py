@@ -22,6 +22,7 @@ from secaudit.core.executors import (
     NativeExecutor,
     image_exists,
     list_managed_containers,
+    reap_stale_containers,
 )
 from secaudit.core.intake import (
     DEFAULT_LIMITS,
@@ -84,6 +85,7 @@ def preflight(options: ScanOptions, adapters: list[ScannerAdapter]) -> None:
             f"Docker daemon is not reachable ({detail}). Start Docker Desktop and retry, "
             "or use --runner native with --i-trust-this-code for trusted code."
         )
+    reap_stale_containers(options.docker)  # orphans left by a killed earlier run (review #13)
     missing = [a.image for a in adapters if not image_exists(a.image, options.docker)]
     if missing:
         raise ScanEnvironmentError(

@@ -65,8 +65,11 @@ def test_every_mandatory_flag_is_present(spec):
     out_mount = next(m for m in mounts if "target=/out" in m)
     assert src_mount.endswith(",readonly"), "source must be mounted read-only"
     assert "readonly" not in out_mount, "output is the one writable mount"
-    assert argv[-3:] == ["bandit", "-r", "."], "tool command comes last, after the image"
-    assert argv[argv.index("secaudit/bandit:1.9.4") + 1] == "bandit"
+    image_at = argv.index("secaudit/bandit:1.9.4")
+    assert argv[image_at + 1 : image_at + 5] == ["timeout", "-k", "5", "610"], (
+        "in-container deadline (timeout_s + 10)"
+    )
+    assert argv[-3:] == ["bandit", "-r", "."], "the tool command comes last"
 
 
 def test_forbidden_options_are_never_produced(spec, dirs):

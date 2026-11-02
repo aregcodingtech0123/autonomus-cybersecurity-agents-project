@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import subprocess
 import tempfile
@@ -17,6 +18,7 @@ from secaudit.core.sandbox import (
     Mount,
     NetworkPolicy,
     ResourceLimits,
+    kill_container,
     run_container,
     subprocess_runner,
 )
@@ -166,3 +168,63 @@ def list_managed_containers(name_filter: str = "", docker: str = "docker") -> li
         argv, capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL
     )  # fmt: skip
     return [line for line in done.stdout.splitlines() if line.strip()]
+
+
+STALE_AFTER_S = 24 * 3600  # guards against a recycled owner pid keeping a container alive forever
+
+
+def pid_alive(pid: int) -> bool:
+    """Is a process with this pid running? (posix: signal 0; Windows: OpenProcess)"""
+    if pid <= 0:
+        return False
+    if os.name == "posix":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True  # exists, owned by someone else
+        return True
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    process_query_limited_information, still_active, access_denied = 0x1000, 259, 5
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == access_denied or kernel32.GetLastError() == access_denied
+    try:
+        code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def reap_stale_containers(docker: str = "docker", *, now: float | None = None) -> list[str]:
+    """Remove secaudit containers whose owning secaudit process is gone (or that are very old).
+
+    Containers carry `org.secaudit.owner-pid` and `org.secaudit.started` labels. Best effort:
+    never raises. Returns the names that were removed.
+    """
+    fmt = '{{.Names}}|{{.Label "org.secaudit.owner-pid"}}|{{.Label "org.secaudit.started"}}'
+    try:
+        done = exe.run(
+            [docker, "ps", "-a", "--filter", "label=org.secaudit.managed=true", "--format", fmt],
+            capture_output=True, text=True, check=False, stdin=subprocess.DEVNULL, timeout=60,
+        )  # fmt: skip
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    current = now if now is not None else time.time()
+    removed: list[str] = []
+    for line in done.stdout.splitlines():
+        parts = line.strip().split("|")
+        if len(parts) != 3 or not parts[0]:
+            continue
+        name, pid_text, started_text = parts
+        if not pid_text.isdigit():
+            continue  # unlabelled (older) container: not ours to judge
+        pid = int(pid_text)
+        old = started_text.isdigit() and current - int(started_text) > STALE_AFTER_S
+        if pid != os.getpid() and (old or not pid_alive(pid)):
+            kill_container(name, docker=docker)
+            removed.append(name)
+    return removed

@@ -20,6 +20,7 @@ from pathlib import Path
 
 from secaudit import __version__
 from secaudit.core import exe
+from secaudit.core.executors import reap_stale_containers
 from secaudit.core.intake import DEFAULT_LIMITS, CleanupError, IntakeError
 from secaudit.core.rules import DEFAULT_RULESETS, RulesError, update_rules
 from secaudit.core.sandbox import ResourceLimits, docker_available
@@ -216,6 +217,7 @@ def _cmd_rules_update(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return EXIT_ENV
+    reap_stale_containers()
     semgrep = SemgrepAdapter(None)
     try:
         cache = update_rules(

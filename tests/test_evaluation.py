@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from canaries import BENCHMARK_PASSWORD, aws_key_id, aws_secret_key, stripe_test_key_short
+from canaries import BENCHMARK_PASSWORD, ini_key_id, ini_secret, planted_api_key_prefix
 from secaudit import cli
 from secaudit.core import evaluation
 from secaudit.core.models import Audit, RawRef, SecurityFinding, Severity, ToolHit, ToolRun
@@ -14,10 +14,10 @@ BASELINE = Path(__file__).resolve().parent / "fixtures" / "phase1_baseline"
 TARGET = ROOT / "benchmarks" / "targets" / "vuln_python_app"
 TRUTH = ROOT / "benchmarks" / "expected_findings.yaml"
 PLANTED = [
-    stripe_test_key_short(),
+    planted_api_key_prefix(),
     BENCHMARK_PASSWORD,
-    aws_key_id(),
-    aws_secret_key()[:16],
+    ini_key_id(),
+    ini_secret()[:16],
 ]
 
 

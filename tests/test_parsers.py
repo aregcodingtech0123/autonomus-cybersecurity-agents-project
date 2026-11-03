@@ -7,9 +7,9 @@ import pytest
 from canaries import (
     BENCHMARK_PASSWORD,
     PLACEHOLDER_PASSWORD,
-    aws_key_id,
-    aws_secret_key,
-    stripe_test_key_short,
+    ini_key_id,
+    ini_secret,
+    planted_api_key_prefix,
 )
 from secaudit.core.normalize.pip_audit import parse_pip_audit
 from secaudit.core.normalize.sarif import parse_sarif
@@ -19,9 +19,9 @@ RAW = BASELINE / "raw"
 PLANTED = [
     BENCHMARK_PASSWORD,
     PLACEHOLDER_PASSWORD,
-    stripe_test_key_short(),
-    aws_key_id(),
-    aws_secret_key()[:16],
+    planted_api_key_prefix(),
+    ini_key_id(),
+    ini_secret()[:16],
 ]
 
 

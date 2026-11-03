@@ -1,7 +1,7 @@
 """Build real audit directories (manifest + raw + findings.json [+ source]) for storage/report tests.
 
 They are made from the COMMITTED baseline: its raw outputs, its manifest and the benchmark target as
-the retained source, so the data is the real 25-finding audit, not a hand-made stand-in.
+the retained source, so the data is the real 24-finding audit (25 before ADR-003), not a hand-made stand-in.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from secaudit.core.normalize.pipeline import export_json, normalize_audit_dir
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = ROOT / "benchmarks" / "baseline"
 TARGET = ROOT / "benchmarks" / "targets" / "vuln_python_app"
-BASELINE_AUDIT_ID = "20261103T081804Z-06b4cbe7"
+BASELINE_AUDIT_ID = "20261103T161647Z-68eba1f9"
 
 
 def make_audit_dir(

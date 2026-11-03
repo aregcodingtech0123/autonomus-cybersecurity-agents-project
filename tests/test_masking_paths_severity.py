@@ -1,12 +1,12 @@
 import pytest
 
 from canaries import (
-    aws_docs_key_id,
-    aws_docs_secret_key,
-    aws_key_id,
-    aws_secret_key,
+    ini_example_key_id,
+    ini_example_secret,
+    ini_key_id,
+    ini_secret,
+    planted_api_key,
     planted_secrets,
-    stripe_test_key,
 )
 from secaudit.core.models import Confidence, Severity
 from secaudit.core.normalize.masking import REDACTED, mask_lines, mask_message, mask_text, sanitize
@@ -21,13 +21,13 @@ PLANTED = planted_secrets()
 @pytest.mark.parametrize(
     "line",
     [
-        f'PAYMENT_API_KEY = "{stripe_test_key()}"',
+        f'PAYMENT_API_KEY = "{planted_api_key()}"',
         'ADMIN_PASSWORD = "not-a-real-password-benchmark-fake"',
         'return {"user": "test_user", "password": "placeholder-not-a-real-password"}',
-        f"aws_access_key_id = {aws_key_id()}",
-        f"aws_secret_access_key = {aws_secret_key()}",
-        f"aws_access_key_id = {aws_docs_key_id()}",
-        f"aws_secret_access_key = {aws_docs_secret_key()}",
+        f"aws_access_key_id = {ini_key_id()}",
+        f"aws_secret_access_key = {ini_secret()}",
+        f"aws_access_key_id = {ini_example_key_id()}",
+        f"aws_secret_access_key = {ini_example_secret()}",
         "Possible hardcoded password: 'not-a-real-password-benchmark-fake'",
         "Possible hardcoded password: 'placeholder-not-a-real-password'",
     ],

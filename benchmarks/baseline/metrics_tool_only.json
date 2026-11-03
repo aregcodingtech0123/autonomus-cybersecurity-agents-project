@@ -74,13 +74,13 @@
     "A02": 1,
     "A04": 2,
     "A05": 6,
-    "A07": 5,
+    "A07": 4,
     "A08": 3,
     "A10": 4,
     "unmapped": 4
   },
   "findings_by_severity": {
-    "HIGH": 9,
+    "HIGH": 8,
     "LOW": 9,
     "MEDIUM": 4,
     "UNKNOWN": 3
@@ -111,9 +111,9 @@
     }
   ],
   "inputs": {
-    "audit_id": "20261103T081804Z-06b4cbe7",
+    "audit_id": "20261103T161647Z-68eba1f9",
     "excluded_cases": [],
-    "ground_truth_sha256": "2f26d9bdf37df5622e10413fc87b28fe805088933c83fe790e5e84bd829e164e",
+    "ground_truth_sha256": "7299becf912296a08f00c82dfa98d04b8a17fedf12dc918fb6bf5bece6d85e5a",
     "semgrep_rules": {
       "fetch_id": "20261102T205851Z",
       "rulesets": [
@@ -252,7 +252,7 @@
       "id": "N07",
       "matches_expectation": true,
       "rules": [],
-      "title": "AWS documented example key pair (allowlisted by design)"
+      "title": "Credential-shaped pair carrying an allowlisted word (EXAMPLE), not reported by design"
     }
   ],
   "neutralized_files": [],
@@ -271,14 +271,14 @@
     },
     "gitleaks": {
       "dedup_ratio": 1.0,
-      "findings": 3,
-      "hits": 3,
+      "findings": 2,
+      "hits": 2,
       "negatives_flagged": 0,
       "positives_detected": 2,
-      "raw_results": 3,
+      "raw_results": 2,
       "skipped_results": 0,
       "status": "completed",
-      "unique_hits": 3,
+      "unique_hits": 2,
       "version": "8.30.1"
     },
     "pip-audit": {
@@ -352,12 +352,11 @@
         "gitleaks"
       ],
       "findings": [
-        "F-01f6fc14acc2",
-        "F-12b22390e616"
+        "F-01f6fc14acc2"
       ],
       "id": "P03",
       "matches_expectation": true,
-      "title": "Synthetic AWS-pattern key pair in a config file"
+      "title": "Secret token in an .ini configuration file, detected by a generic rule"
     },
     {
       "detected": true,
@@ -535,12 +534,12 @@
   "skipped_results": 0,
   "summary": {
     "findings": {
-      "dedup_ratio": 1.84,
+      "dedup_ratio": 1.88,
       "evidence_coverage": 1.0,
       "in_test_paths": 5,
-      "raw_results": 46,
+      "raw_results": 45,
       "related_informational": 2,
-      "total": 25,
+      "total": 24,
       "unlabeled": 0
     },
     "negatives": {

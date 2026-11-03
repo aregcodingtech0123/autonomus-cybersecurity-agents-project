@@ -136,14 +136,14 @@ def test_a_post_processing_failure_keeps_the_audit_and_says_how_to_retry(
 def test_findings_list_defaults_to_the_latest_audit_and_filters(populated, capfd):
     out, _dir = populated
     code, stdout, _ = run(capfd, "findings", "list", "--out", out)
-    assert code == 0 and stdout.startswith(f"audit {BASELINE_AUDIT_ID}: 25 finding(s)")
+    assert code == 0 and stdout.startswith(f"audit {BASELINE_AUDIT_ID}: 24 finding(s)")
     code, stdout, _ = run(capfd, "findings", "list", "--out", out, "--severity", "high")
     rows = stdout.splitlines()[1:]
     assert code == 0 and rows and all(" HIGH " in row for row in rows)
     code, stdout, _ = run(capfd, "findings", "list", "--out", out, "--tool", "gitleaks")
-    assert stdout.startswith(f"audit {BASELINE_AUDIT_ID}: 3 finding(s)")
+    assert stdout.startswith(f"audit {BASELINE_AUDIT_ID}: 2 finding(s)")
     code, stdout, _ = run(capfd, "findings", "list", "--out", out, "--audit", BASELINE_AUDIT_ID)
-    assert "25 finding(s)" in stdout
+    assert "24 finding(s)" in stdout
 
 
 def test_findings_list_rejects_bad_input_and_a_missing_database(populated, tmp_path, capfd):
@@ -189,7 +189,7 @@ def test_report_json_and_html_to_stdout_and_to_a_file(populated, tmp_path, capfd
     code, stdout, _ = run(capfd, "report", BASELINE_AUDIT_ID, "--format", "json", "--db", db)
     assert code == 0
     document = json.loads(stdout)
-    assert document["audit_id"] == BASELINE_AUDIT_ID and len(document["findings"]) == 25
+    assert document["audit_id"] == BASELINE_AUDIT_ID and len(document["findings"]) == 24
     code, stdout, _ = run(capfd, "report", BASELINE_AUDIT_ID, "--db", db)
     assert code == 0 and "Content-Security-Policy" in stdout and "<script" not in stdout
     target = tmp_path / "r" / "x.html"

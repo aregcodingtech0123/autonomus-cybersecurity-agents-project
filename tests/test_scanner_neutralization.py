@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from canaries import planted_api_key
 from secaudit.core.rules import RulesError, load_rules_cache
 from secaudit.core.sandbox import ResourceLimits
 from secaudit.core.scan import ScanOptions, run_scan
@@ -167,8 +168,8 @@ CASES = [
         lambda w: edit(
             w,
             "webshop/settings.py",
-            'VQRgmEuLNsKJ4a0ZkKpFxr11"',
-            'VQRgmEuLNsKJ4a0ZkKpFxr11"  # gitleaks:allow',
+            f'{planted_api_key()}"',
+            f'{planted_api_key()}"  # gitleaks:allow',
         ),
         None,
     ),

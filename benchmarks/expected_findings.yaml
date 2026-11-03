@@ -70,11 +70,13 @@ cases:
     cwe: CWE-798
     expected_detecting_tools: [bandit, gitleaks]
     notes: >
-      Two secrets, split detection. Gitleaks (stripe-access-token) flags only line 3 (API key).
+      Two secrets, split detection. Gitleaks (generic-api-key) flags only line 3 (API key).
       Bandit B105 flags only line 4 (ADMIN_PASSWORD variable name). No tool flags both lines.
+      ADR-003 (re-scrub): the API key is generic-shaped (`bench_` prefix), no longer Stripe-shaped,
+      so Gitleaks reports it with generic-api-key instead of stripe-access-token. Same line.
 
   - id: P03
-    title: Synthetic AWS-pattern key pair in a config file
+    title: Secret token in an .ini configuration file, detected by a generic rule
     kind: positive
     file: config/settings.ini
     line_start: 7
@@ -86,8 +88,12 @@ cases:
       REVISED in Phase 1 (Task 0). The original value was AWS's documented example key, which
       Gitleaks allowlists, so the case was flawed (the old "miss" was not a tool miss). It now
       uses a random synthetic key that matches the AWS pattern but is not a documented example
-      and is not valid. Gitleaks 8.30.1 reports aws-access-token (line 7) and generic-api-key
-      (line 8). The documented example key moved to negative case N07.
+      and is not valid. The documented example key moved to negative case N07.
+      RE-DESCRIBED by ADR-003 (re-scrub): both values are now generic-shaped (`bench_` prefix) so no
+      provider-shaped credential exists anywhere in the repository; the case is no longer
+      AWS-specific. Gitleaks 8.30.1 reports generic-api-key on line 8 only: its generic rule
+      allowlists identifiers matching `key_id`, so line 7 (`aws_access_key_id`) is not reported
+      once the AWS-specific rule no longer applies. One line in range is enough: still detected.
 
   - id: P04
     title: yaml.load with the unsafe default Loader
@@ -320,7 +326,7 @@ cases:
       explanatory comment. A triage layer is expected to dismiss this one.
 
   - id: N07
-    title: AWS documented example key pair (allowlisted by design)
+    title: Credential-shaped pair carrying an allowlisted word (EXAMPLE), not reported by design
     kind: negative
     file: config/settings.ini
     line_start: 12
@@ -331,7 +337,9 @@ cases:
     observed_false_alarms: []
     notes: >
       Added in Phase 1 (Task 0): the original P03 value, kept as a negative. Gitleaks 8.30.1
-      does not report it, which is the desired behavior.
+      does not report it, which is the desired behavior. ADR-003 (re-scrub): no longer AWS's
+      documented example; generic-shaped values that end in EXAMPLE / EXAMPLEKEY like the original,
+      which Gitleaks' stopword list skips. Still not reported.
 
   # ------------------------------------------------- related informational (Phase 2B)
   - id: R01

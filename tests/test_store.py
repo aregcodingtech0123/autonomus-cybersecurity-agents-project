@@ -104,7 +104,7 @@ def test_connection_pragmas_wal_busy_timeout_foreign_keys(db):
 def test_ingest_stores_the_baseline_and_it_round_trips_exactly(db, audit_dir):
     repo = Repository(db)
     result = ingest_audit_dir(repo, audit_dir)
-    assert (result.status, result.findings, result.hits) == ("inserted", 25, 38)
+    assert (result.status, result.findings, result.hits) == ("inserted", 24, 37)
     stored = repo.get_audit(BASELINE_AUDIT_ID)
     assert stored == normalize_audit_dir(audit_dir), "Audit -> rows -> Audit must lose nothing"
     assert Audit.model_validate_json(stored.model_dump_json()) == stored
@@ -183,7 +183,7 @@ def test_equal_fingerprints_in_one_audit_are_stored_with_distinct_ordinals(db, a
         ).scalars().all()  # fmt: skip
     already = sum(f.fingerprint == audit.findings[0].fingerprint for f in audit.findings)
     assert already >= 1 and ordinals == list(range(already + 1))
-    assert len(repo.get_audit(BASELINE_AUDIT_ID).findings) == 26
+    assert len(repo.get_audit(BASELINE_AUDIT_ID).findings) == 25
 
 
 def test_deleting_an_audit_cascades_to_every_child_table(db, audit_dir):
@@ -198,11 +198,11 @@ def test_queries_filter_by_severity_and_tool(db, audit_dir):
     repo = Repository(db)
     ingest_audit_dir(repo, audit_dir)
     everything = repo.list_findings(BASELINE_AUDIT_ID)
-    assert len(everything) == 25
+    assert len(everything) == 24
     high = repo.list_findings(BASELINE_AUDIT_ID, severity="high")
     assert high and all(f.severity == "HIGH" for f in high)
     gitleaks = repo.list_findings(BASELINE_AUDIT_ID, tool="gitleaks")
-    assert len(gitleaks) == 3 and all("gitleaks" in f.tools for f in gitleaks)
+    assert len(gitleaks) == 2 and all("gitleaks" in f.tools for f in gitleaks)
     first = everything[0]
     found = repo.find_finding(first.id)
     assert found and found[0] == BASELINE_AUDIT_ID and found[1].id == first.id and found[1].hits
@@ -290,7 +290,7 @@ def test_prerequisites_and_schema_problems_are_reported_not_crashed(db, tmp_path
 
 def test_cli_ingest_reports_status_and_exit_codes(audit_dir, capsys):
     assert cli.main(["ingest", str(audit_dir)]) == 0
-    assert "inserted (25 findings, 38 hits)" in capsys.readouterr().out
+    assert "inserted (24 findings, 37 hits)" in capsys.readouterr().out
     assert cli.main(["ingest", str(audit_dir)]) == 0
     assert "unchanged" in capsys.readouterr().out
     target = audit_dir / "raw" / "pip-audit.json"
@@ -318,13 +318,13 @@ def test_two_processes_ingesting_the_same_audit_both_succeed_and_store_it_once(t
     engine = make_engine(db_path)
     try:
         with engine.connect() as conn:
-            assert conn.execute(text("SELECT count(*) FROM finding")).scalar() == 25
+            assert conn.execute(text("SELECT count(*) FROM finding")).scalar() == 24
     finally:
         engine.dispose()
 
 
 def test_two_processes_ingesting_different_audits_into_one_database(tmp_path):
-    a = make_audit_dir(tmp_path / "audits", "20261103T081804Z-06b4cbe7")
+    a = make_audit_dir(tmp_path / "audits", "20261103T161647Z-68eba1f9")
     b = make_audit_dir(tmp_path / "audits", "20261103T091804Z-16b4cbe7")
     db_path = tmp_path / "shared.db"
     procs = [_ingest_process(a, db_path), _ingest_process(b, db_path)]
@@ -334,7 +334,7 @@ def test_two_processes_ingesting_different_audits_into_one_database(tmp_path):
     try:
         repo = Repository(engine)
         assert {s.audit_id for s in repo.list_audits()} == {a.name, b.name}
-        assert all(s.findings == 25 for s in repo.list_audits())
+        assert all(s.findings == 24 for s in repo.list_audits())
         # the same finding id appears in both audits: lookups need (and honour) the audit
         some = repo.list_findings(a.name)[0].id
         assert repo.find_finding(some, b.name)[0] == b.name
@@ -385,7 +385,7 @@ def test_windows_database_file_is_restricted_to_the_current_user_and_still_usabl
 
 
 def test_four_processes_on_two_audits_end_with_each_stored_exactly_once(tmp_path):
-    a = make_audit_dir(tmp_path / "audits", "20261103T081804Z-06b4cbe7")
+    a = make_audit_dir(tmp_path / "audits", "20261103T161647Z-68eba1f9")
     b = make_audit_dir(tmp_path / "audits", "20261103T091804Z-16b4cbe7")
     db_path = tmp_path / "shared.db"
     procs = [_ingest_process(d, db_path) for d in (a, b, a, b)]
@@ -394,7 +394,7 @@ def test_four_processes_on_two_audits_end_with_each_stored_exactly_once(tmp_path
     engine = make_engine(db_path)
     try:
         with engine.connect() as conn:
-            assert count(conn, "audit") == 2 and count(conn, "finding") == 50
-            assert count(conn, "finding_hit") == 76 and count(conn, "raw_artifact") == 10
+            assert count(conn, "audit") == 2 and count(conn, "finding") == 48
+            assert count(conn, "finding_hit") == 74 and count(conn, "raw_artifact") == 10
     finally:
         engine.dispose()

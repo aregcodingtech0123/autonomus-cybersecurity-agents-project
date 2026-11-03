@@ -24,38 +24,38 @@ def _rep(fragment: str, times: int) -> str:
 
 # ---------------------------------------------------------------- the benchmark's planted fakes
 # benchmarks/targets/** keeps these values as literals on purpose: they ARE the vulnerability under
-# test, fake and frozen with the baseline. Tests need the same strings to prove they never leak
-# through masking, so they are rebuilt here from fragments. test_no_secret_literals.py checks that
-# each builder still equals what the benchmark target contains, so none of them can drift.
+# test. Since ADR-003 they are generic-shaped (`bench_` prefix, random body), so they match no
+# provider format and may be ordinary literals here too. test_no_secret_literals.py checks that
+# each one still equals what the benchmark target contains, so none of them can drift.
 
 
-def stripe_test_key() -> str:
-    """The Stripe-shaped fake in the benchmark target (`sk_test_` + 24 characters)."""
+def planted_api_key() -> str:
+    """PAYMENT_API_KEY in webshop/settings.py (case P02; Gitleaks generic-api-key)."""
     return "bench_n0VQRgmEuLNsKJ4a0ZkKpFxr11"
 
 
-def stripe_test_key_short() -> str:
-    """A shorter prefix-compatible form that appears in SARIF snippets (`sk_test_` + 8)."""
-    return "bench_n0VQRgmEuL"
+def planted_api_key_prefix() -> str:
+    """The first 16 characters: a partial copy must not survive masking either."""
+    return planted_api_key()[:16]
 
 
-def aws_key_id() -> str:
-    """The synthetic AWS-pattern access key id planted in config/settings.ini (not valid)."""
+def ini_key_id() -> str:
+    """aws_access_key_id in config/settings.ini, line 7 (case P03)."""
     return "bench_uoSN55OKIJ9XKt"
 
 
-def aws_secret_key() -> str:
-    """The synthetic 40-character secret paired with `aws_key_id()` (not valid)."""
+def ini_secret() -> str:
+    """aws_secret_access_key in config/settings.ini, line 8 (case P03; Gitleaks generic-api-key)."""
     return "bench_BvXX7C2JUsDNWWhy5PUSWscCmH1w2oxhud"
 
 
-def aws_docs_key_id() -> str:
-    """AWS's documented example access key id (negative case N07)."""
+def ini_example_key_id() -> str:
+    """Line 12 (negative case N07): ends in the allowlisted word EXAMPLE."""
     return "bench_eEA2vGLEXAMPLE"
 
 
-def aws_docs_secret_key() -> str:
-    """AWS's documented example secret key (negative case N07)."""
+def ini_example_secret() -> str:
+    """Line 13 (negative case N07): ends in EXAMPLEKEY, which Gitleaks' stopwords skip."""
     return "bench_482czv7pDcEQR8dwYWxBZZH4EXAMPLEKEY"
 
 
@@ -67,24 +67,24 @@ PLACEHOLDER_PASSWORD = "placeholder-not-a-real-password"  # noqa: S105 - the pla
 def planted_secrets() -> list[str]:
     """Every fake the benchmark target plants, documented examples included."""
     return [
-        stripe_test_key(),
+        planted_api_key(),
         BENCHMARK_PASSWORD,
         PLACEHOLDER_PASSWORD,
-        aws_key_id(),
-        aws_secret_key(),
-        aws_docs_key_id(),
-        aws_docs_secret_key(),
+        ini_key_id(),
+        ini_secret(),
+        ini_example_key_id(),
+        ini_example_secret(),
     ]
 
 
 def planted_target_literals() -> tuple[str, ...]:
     """The subset that must not leak outside the documented secret-bearing raw files."""
     return (
-        stripe_test_key(),
+        planted_api_key(),
         BENCHMARK_PASSWORD,
         PLACEHOLDER_PASSWORD,
-        aws_key_id(),
-        aws_secret_key(),
+        ini_key_id(),
+        ini_secret(),
     )
 
 

@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "audit_id": "20261103T081804Z-06b4cbe7",
+  "audit_id": "20261103T161647Z-68eba1f9",
   "secaudit_version": "0.1.0",
-  "started_at": "2026-11-03T08:18:04+00:00",
-  "finished_at": "2026-11-03T08:18:25+00:00",
+  "started_at": "2026-11-03T16:16:47+00:00",
+  "finished_at": "2026-11-03T16:17:10+00:00",
   "runner": "docker",
   "input": {
     "kind": "directory",
     "source": "vuln_python_app",
-    "sha256": "13f8eff9383ef6d15aa8a3286186f14f2aecba9f234a2e168e19aae926ab237a",
+    "sha256": "b686f3f45a661af34bf8b102526b971ad80dd9ebd195ace73d3d1d294741e047",
     "file_count": 16,
-    "total_bytes": 1087651,
+    "total_bytes": 1087653,
     "commit": null,
     "skipped_entries": []
   },
@@ -60,9 +60,9 @@
         "--label",
         "org.secaudit.managed=true",
         "--label",
-        "org.secaudit.owner-pid=20692",
+        "org.secaudit.owner-pid=25832",
         "--label",
-        "org.secaudit.started=1793693885",
+        "org.secaudit.started=1793722609",
         "--network",
         "none",
         "--read-only",
@@ -106,9 +106,9 @@
       ],
       "network": "none",
       "exit_code": 1,
-      "duration_s": 3.897,
+      "duration_s": 4.008,
       "artifact": "raw/bandit.sarif",
-      "artifact_sha256": "66f7f0a1343dc6467c92fb03251b552664ba288c7e5c85ce750938df2bf18c48",
+      "artifact_sha256": "76a5fefba308bebf229089452155e6d060580c3e2a4a58fe594927b59e729ac3",
       "limitations": [
         "Files Bandit cannot parse (e.g. syntax errors) are silently omitted: neither the SARIF nor a notification lists them (verified 2026-11-03).",
         "Only Python source is analysed; no coverage report is produced."
@@ -148,9 +148,9 @@
         "--label",
         "org.secaudit.managed=true",
         "--label",
-        "org.secaudit.owner-pid=20692",
+        "org.secaudit.owner-pid=25832",
         "--label",
-        "org.secaudit.started=1793693892",
+        "org.secaudit.started=1793722616",
         "--network",
         "none",
         "--read-only",
@@ -208,7 +208,7 @@
       ],
       "network": "none",
       "exit_code": 0,
-      "duration_s": 8.09,
+      "duration_s": 8.379,
       "artifact": "raw/semgrep.sarif",
       "artifact_sha256": "1992d3b1bb7c3daacc438370ed3a3617e1057d5776275f7954451db72ec30a21",
       "ruleset_info": {
@@ -242,8 +242,8 @@
       "extra_artifacts": [
         {
           "path": "raw/semgrep.json",
-          "sha256": "600e8d30875bfc265069276c3005981325eb335e6eddb600191c7173a96526f7",
-          "bytes": 19481
+          "sha256": "efde7fca097b5b272e5436b6c2c410897e6abbe27e2f8e6aca9f82a874a37d3d",
+          "bytes": 19487
         }
       ]
     },
@@ -279,9 +279,9 @@
         "--label",
         "org.secaudit.managed=true",
         "--label",
-        "org.secaudit.owner-pid=20692",
+        "org.secaudit.owner-pid=25832",
         "--label",
-        "org.secaudit.started=1793693901",
+        "org.secaudit.started=1793722625",
         "--network",
         "none",
         "--read-only",
@@ -331,9 +331,9 @@
       ],
       "network": "none",
       "exit_code": 1,
-      "duration_s": 0.73,
+      "duration_s": 0.769,
       "artifact": "raw/gitleaks.sarif",
-      "artifact_sha256": "3442cb07646f457ee335cc36cd57727b93fadc936d7ee8d07106ead597d44139",
+      "artifact_sha256": "7fe5539411b95b846591c72be71a80a9f7f6741a35eb2a328d96fc50c603e3c9",
       "limitations": [
         "Gitleaks' built-in default config has a path allowlist: secrets under node_modules/, in lock files (go.sum, package-lock.json, poetry.lock), and in .svg and .pdf files were NOT reported (verified in the Phase 1 review, 2026-11-03). The config was deliberately not rewritten in Phase 1.",
         "Binary files are not scanned (verified 2026-11-03).",
@@ -369,9 +369,9 @@
         "--label",
         "org.secaudit.managed=true",
         "--label",
-        "org.secaudit.owner-pid=20692",
+        "org.secaudit.owner-pid=25832",
         "--label",
-        "org.secaudit.started=1793693903",
+        "org.secaudit.started=1793722628",
         "--network",
         "bridge",
         "--read-only",
@@ -418,9 +418,9 @@
       ],
       "network": "bridge",
       "exit_code": 1,
-      "duration_s": 1.85,
+      "duration_s": 2.042,
       "artifact": "raw/pip-audit.json",
-      "artifact_sha256": "61a8408ef8d29ff0a493980b5632d1a3b5cc91fa6d2c70561b18a6096f75c7d6",
+      "artifact_sha256": "afd10a9e181eef5f678058bcd947803405fd59231a11a249c3b465fd55167ec8",
       "requirements_files": [
         "requirements.txt"
       ],

@@ -104,7 +104,7 @@ def test_report_has_every_required_section_for_the_baseline(baseline_audit):
         "<h2>Notices</h2>", "OWASP Top 10:2025",
     ):  # fmt: skip
         assert heading in html, heading
-    assert html.count('<details id="finding-') == len(baseline_audit.findings) == 25
+    assert html.count('<details id="finding-') == len(baseline_audit.findings) == 24
     assert "Gitleaks' built-in default config has a path allowlist" in html.replace("&#39;", "'")
     assert "semgrep: coverage known" in html and "bandit: coverage unknown" in html
 

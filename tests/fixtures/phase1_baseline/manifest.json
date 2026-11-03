@@ -8,7 +8,7 @@
   "input": {
     "kind": "directory",
     "source": "vuln_python_app",
-    "sha256": "8f089299c5ec5230800684aae23aec1f5f811107f4b9a8dbce3c6f50b72ac339",
+    "sha256": "3f92d48c6bb2e81a83b3bceb0510d8ab8b03947e0b4e6356a1295fff477ae489",
     "file_count": 15,
     "total_bytes": 6365,
     "commit": null,
@@ -90,7 +90,7 @@
       "exit_code": 1,
       "duration_s": 0.827,
       "artifact": "raw/bandit.sarif",
-      "artifact_sha256": "7d91a5d9fb9c2ad04e953c9172c91376db5770706ff4ade80a48e99e8a719666"
+      "artifact_sha256": "8b65b885aaafc9988816a7ab7672d14e1852d8c20bed5cf1713caf6a30536253"
     },
     "semgrep": {
       "status": "completed",

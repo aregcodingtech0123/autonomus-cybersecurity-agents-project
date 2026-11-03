@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from canaries import aws_secret_key
+from canaries import ini_secret
 from linux_probe import run_linux
 from secaudit.core import intake as intake_mod
 from secaudit.core.intake import (
@@ -31,7 +31,7 @@ def _tree(root: Path) -> Path:
 
 def test_hardlink_to_a_file_outside_the_input_is_rejected(tmp_path, ws_parent):
     outside = tmp_path / "victim_credentials.txt"
-    outside.write_bytes(b"aws_secret_access_key = " + aws_secret_key().encode() + b"\n")
+    outside.write_bytes(b"aws_secret_access_key = " + ini_secret().encode() + b"\n")
     proj = _tree(tmp_path / "proj")
     os.link(outside, proj / "config.txt")
     assert os.stat(proj / "config.txt").st_nlink == 2

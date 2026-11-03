@@ -16,9 +16,9 @@ from pathlib import Path
 from canaries import (
     BENCHMARK_PASSWORD,
     pem_block,
+    planted_api_key,
     planted_secrets,
     single_line_canaries,
-    stripe_test_key,
 )
 from secaudit import cli
 from secaudit.core.normalize.pipeline import export_json, normalize_audit_dir
@@ -58,7 +58,7 @@ def test_positive_control_the_raw_files_do_contain_the_planted_secrets(tmp_path)
     audit_dir = make_audit_dir(tmp_path / "audits")
     raw = all_bytes((audit_dir / "raw").iterdir())
     found = {s for _name, s in leaks(raw, PLANTED)}
-    assert {BENCHMARK_PASSWORD, stripe_test_key()} <= found, (
+    assert {BENCHMARK_PASSWORD, planted_api_key()} <= found, (
         "if raw output no longer holds the fakes this whole test proves nothing"
     )
 
@@ -70,7 +70,7 @@ def test_benchmark_audit_derived_outputs_are_free_of_the_planted_secrets(tmp_pat
     printed = [run_cli(capfd, "ingest", audit_dir)]
     printed.append(run_cli(capfd, "findings", "list", "--out", out))
     ids = [line.split()[0] for line in printed[-1].splitlines()[1:]]
-    assert len(ids) == 25
+    assert len(ids) == 24
     printed += [run_cli(capfd, "findings", "show", i, "--out", out) for i in ids]
     printed.append(run_cli(capfd, "audit", "list", "--out", out))
     printed.append(run_cli(capfd, "report", BASELINE_AUDIT_ID, "--db", db))

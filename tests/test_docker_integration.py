@@ -383,7 +383,14 @@ def test_cli_scan_end_to_end_exit_code_and_layout(tmp_path, rules_cache, capsys)
         ["scan", str(TARGET), "--out", str(tmp_path / "o"), "--tools", "bandit,gitleaks"]
     )
     assert code == cli.EXIT_OK
-    audit = next((tmp_path / "o").iterdir())
+    # The output root holds the audit directory AND secaudit.db. Listing order is filesystem
+    # dependent (sorted on NTFS, arbitrary on ext4: the first CI run on Linux got the database file).
+    root = tmp_path / "o"
+    audit_dirs = [p for p in root.iterdir() if p.is_dir()]
+    assert len(audit_dirs) == 1 and (root / "secaudit.db").is_file(), sorted(
+        p.name for p in root.iterdir()
+    )
+    audit = audit_dirs[0]
     manifest = json.loads((audit / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["tool_order"] == ["bandit", "gitleaks"]
     assert os.path.isfile(audit / "raw" / "bandit.sarif")

@@ -5,21 +5,14 @@ from pathlib import Path
 
 import pytest
 
+from canaries import planted_secrets
 from secaudit.core.models import RawRef, Severity, ToolHit
 from secaudit.core.normalize.dedup import build_findings, collapse_identical
 from secaudit.core.normalize.pipeline import export_json, normalize_audit
 
 BASELINE = Path(__file__).resolve().parent / "fixtures" / "phase1_baseline"
 TARGET = Path(__file__).resolve().parent.parent / "benchmarks" / "targets" / "vuln_python_app"
-PLANTED = [
-    "bench_n0" "VQRgmEuLNsKJ4a0ZkKpFxr11",
-    "not-a-real-password-benchmark-fake",
-    "placeholder-not-a-real-password",
-    "benc" "h_uoSN55OKIJ9XKt",
-    "bench_BvXX7C2JUsDNWW" "hy5PUSWscCmH1w2oxhud",
-    "benc" "h_eEA2vGLEXAMPLE",
-    "bench_482czv7pDcEQR8" "dwYWxBZZH4EXAMPLEKEY",
-]
+PLANTED = planted_secrets()
 
 
 def hit(

@@ -4,17 +4,24 @@ from pathlib import Path
 
 import pytest
 
+from canaries import (
+    BENCHMARK_PASSWORD,
+    PLACEHOLDER_PASSWORD,
+    aws_key_id,
+    aws_secret_key,
+    stripe_test_key_short,
+)
 from secaudit.core.normalize.pip_audit import parse_pip_audit
 from secaudit.core.normalize.sarif import parse_sarif
 
 BASELINE = Path(__file__).resolve().parent / "fixtures" / "phase1_baseline"
 RAW = BASELINE / "raw"
 PLANTED = [
-    "not-a-real-password-benchmark-fake",
-    "placeholder-not-a-real-password",
-    "bench_n0" "VQRgmEuL",
-    "benc" "h_uoSN55OKIJ9XKt",
-    "bench_BvXX7C2JUs",
+    BENCHMARK_PASSWORD,
+    PLACEHOLDER_PASSWORD,
+    stripe_test_key_short(),
+    aws_key_id(),
+    aws_secret_key()[:16],
 ]
 
 

@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from canaries import planted_target_literals
 from hits import overlaps, tool_hits
 from secaudit import cli
 from secaudit.core.executors import list_managed_containers
@@ -272,13 +273,7 @@ def test_workspace_and_containers_are_cleaned_up(scan_outcome):
     )
 
 
-SECRET_LITERALS = (
-    "bench_n0" "VQRgmEuLNsKJ4a0ZkKpFxr11",
-    "not-a-real-password-benchmark-fake",
-    "placeholder-not-a-real-password",
-    "benc" "h_uoSN55OKIJ9XKt",
-    "bench_BvXX7C2JUsDNWW" "hy5PUSWscCmH1w2oxhud",
-)
+SECRET_LITERALS = planted_target_literals()
 # Raw files that are DOCUMENTED to be secret-bearing (SECURITY_POLICY.md): Bandit embeds the
 # source line verbatim. Everything else, and every derived artifact, must be free of the literals.
 SECRET_BEARING_RAW = {"bandit.sarif", "semgrep.sarif"}

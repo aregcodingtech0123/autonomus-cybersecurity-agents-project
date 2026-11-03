@@ -22,6 +22,72 @@ def _rep(fragment: str, times: int) -> str:
     return fragment * times
 
 
+# ---------------------------------------------------------------- the benchmark's planted fakes
+# benchmarks/targets/** keeps these values as literals on purpose: they ARE the vulnerability under
+# test, fake and frozen with the baseline. Tests need the same strings to prove they never leak
+# through masking, so they are rebuilt here from fragments. test_no_secret_literals.py checks that
+# each builder still equals what the benchmark target contains, so none of them can drift.
+
+
+def stripe_test_key() -> str:
+    """The Stripe-shaped fake in the benchmark target (`sk_test_` + 24 characters)."""
+    return "bench_n0VQRgmEuLNsKJ4a0ZkKpFxr11"
+
+
+def stripe_test_key_short() -> str:
+    """A shorter prefix-compatible form that appears in SARIF snippets (`sk_test_` + 8)."""
+    return "bench_n0VQRgmEuL"
+
+
+def aws_key_id() -> str:
+    """The synthetic AWS-pattern access key id planted in config/settings.ini (not valid)."""
+    return "bench_uoSN55OKIJ9XKt"
+
+
+def aws_secret_key() -> str:
+    """The synthetic 40-character secret paired with `aws_key_id()` (not valid)."""
+    return "bench_BvXX7C2JUsDNWWhy5PUSWscCmH1w2oxhud"
+
+
+def aws_docs_key_id() -> str:
+    """AWS's documented example access key id (negative case N07)."""
+    return "bench_eEA2vGLEXAMPLE"
+
+
+def aws_docs_secret_key() -> str:
+    """AWS's documented example secret key (negative case N07)."""
+    return "bench_482czv7pDcEQR8dwYWxBZZH4EXAMPLEKEY"
+
+
+# Not token-shaped (no vendor prefix), so these are ordinary literals.
+BENCHMARK_PASSWORD = "not-a-real-password-benchmark-fake"  # noqa: S105 - the planted fake
+PLACEHOLDER_PASSWORD = "placeholder-not-a-real-password"  # noqa: S105 - the planted fake
+
+
+def planted_secrets() -> list[str]:
+    """Every fake the benchmark target plants, documented examples included."""
+    return [
+        stripe_test_key(),
+        BENCHMARK_PASSWORD,
+        PLACEHOLDER_PASSWORD,
+        aws_key_id(),
+        aws_secret_key(),
+        aws_docs_key_id(),
+        aws_docs_secret_key(),
+    ]
+
+
+def planted_target_literals() -> tuple[str, ...]:
+    """The subset that must not leak outside the documented secret-bearing raw files."""
+    return (
+        stripe_test_key(),
+        BENCHMARK_PASSWORD,
+        PLACEHOLDER_PASSWORD,
+        aws_key_id(),
+        aws_secret_key(),
+    )
+
+
 def single_line_canaries() -> list[Canary]:
     github = "gh" + "p_" + _rep("Zk3Rt9Qm", 5)
     fine = "github" + "_pat_" + "11AB" + _rep("C", 18) + "_" + _rep("Pq7Lx2", 10)

@@ -13,20 +13,18 @@ import json
 import sqlite3
 from pathlib import Path
 
-from canaries import pem_block, single_line_canaries
+from canaries import (
+    BENCHMARK_PASSWORD,
+    pem_block,
+    planted_secrets,
+    single_line_canaries,
+    stripe_test_key,
+)
 from secaudit import cli
 from secaudit.core.normalize.pipeline import export_json, normalize_audit_dir
 from store_helpers import BASELINE_AUDIT_ID, make_audit_dir
 
-PLANTED = [
-    "bench_n0" "VQRgmEuLNsKJ4a0ZkKpFxr11",
-    "not-a-real-password-benchmark-fake",
-    "placeholder-not-a-real-password",
-    "benc" "h_uoSN55OKIJ9XKt",
-    "bench_BvXX7C2JUsDNWW" "hy5PUSWscCmH1w2oxhud",
-    "benc" "h_eEA2vGLEXAMPLE",
-    "bench_482czv7pDcEQR8" "dwYWxBZZH4EXAMPLEKEY",
-]
+PLANTED = planted_secrets()
 CANARIES = single_line_canaries()
 CANARY_CORES = [c.core for c in CANARIES]
 
@@ -60,7 +58,7 @@ def test_positive_control_the_raw_files_do_contain_the_planted_secrets(tmp_path)
     audit_dir = make_audit_dir(tmp_path / "audits")
     raw = all_bytes((audit_dir / "raw").iterdir())
     found = {s for _name, s in leaks(raw, PLANTED)}
-    assert {"not-a-real-password-benchmark-fake", "bench_n0" "VQRgmEuLNsKJ4a0ZkKpFxr11"} <= found, (
+    assert {BENCHMARK_PASSWORD, stripe_test_key()} <= found, (
         "if raw output no longer holds the fakes this whole test proves nothing"
     )
 

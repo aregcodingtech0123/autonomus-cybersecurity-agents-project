@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from canaries import BENCHMARK_PASSWORD, aws_key_id, aws_secret_key, stripe_test_key_short
 from secaudit import cli
 from secaudit.core import evaluation
 from secaudit.core.models import Audit, RawRef, SecurityFinding, Severity, ToolHit, ToolRun
@@ -13,10 +14,10 @@ BASELINE = Path(__file__).resolve().parent / "fixtures" / "phase1_baseline"
 TARGET = ROOT / "benchmarks" / "targets" / "vuln_python_app"
 TRUTH = ROOT / "benchmarks" / "expected_findings.yaml"
 PLANTED = [
-    "bench_n0" "VQRgmEuL",
-    "not-a-real-password-benchmark-fake",
-    "benc" "h_uoSN55OKIJ9XKt",
-    "bench_BvXX7C2JUs",
+    stripe_test_key_short(),
+    BENCHMARK_PASSWORD,
+    aws_key_id(),
+    aws_secret_key()[:16],
 ]
 
 

@@ -1,5 +1,13 @@
 import pytest
 
+from canaries import (
+    aws_docs_key_id,
+    aws_docs_secret_key,
+    aws_key_id,
+    aws_secret_key,
+    planted_secrets,
+    stripe_test_key,
+)
 from secaudit.core.models import Confidence, Severity
 from secaudit.core.normalize.masking import REDACTED, mask_lines, mask_message, mask_text, sanitize
 from secaudit.core.normalize.paths import normalize_source_path
@@ -7,27 +15,19 @@ from secaudit.core.normalize.severity_map import map_confidence, map_severity
 
 # ---------------------------------------------------------------- masking
 
-PLANTED = [
-    "bench_n0" "VQRgmEuLNsKJ4a0ZkKpFxr11",
-    "not-a-real-password-benchmark-fake",
-    "placeholder-not-a-real-password",
-    "benc" "h_uoSN55OKIJ9XKt",
-    "bench_BvXX7C2JUsDNWW" "hy5PUSWscCmH1w2oxhud",
-    "benc" "h_eEA2vGLEXAMPLE",
-    "bench_482czv7pDcEQR8" "dwYWxBZZH4EXAMPLEKEY",
-]
+PLANTED = planted_secrets()
 
 
 @pytest.mark.parametrize(
     "line",
     [
-        'PAYMENT_API_KEY = "bench_n0' 'VQRgmEuLNsKJ4a0ZkKpFxr11"',
+        f'PAYMENT_API_KEY = "{stripe_test_key()}"',
         'ADMIN_PASSWORD = "not-a-real-password-benchmark-fake"',
         'return {"user": "test_user", "password": "placeholder-not-a-real-password"}',
-        "aws_access_key_id = benc" "h_uoSN55OKIJ9XKt",
-        "aws_secret_access_key = bench_BvXX7C2JUsDNWW" "hy5PUSWscCmH1w2oxhud",
-        "aws_access_key_id = benc" "h_eEA2vGLEXAMPLE",
-        "aws_secret_access_key = bench_482czv7pDcEQR8" "dwYWxBZZH4EXAMPLEKEY",
+        f"aws_access_key_id = {aws_key_id()}",
+        f"aws_secret_access_key = {aws_secret_key()}",
+        f"aws_access_key_id = {aws_docs_key_id()}",
+        f"aws_secret_access_key = {aws_docs_secret_key()}",
         "Possible hardcoded password: 'not-a-real-password-benchmark-fake'",
         "Possible hardcoded password: 'placeholder-not-a-real-password'",
     ],

@@ -7,6 +7,7 @@ cannot blow up.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 from pathlib import Path
@@ -18,6 +19,9 @@ CONTEXT_LINES = 3
 MAX_LINE_BYTES = 2000
 MAX_SNIPPET_LINES = 12
 _TEST_DIRS = {"test", "tests", "testing", "__tests__"}
+MAX_PEM_SCAN_BYTES = 8_000_000
+_PEM_BEGIN = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")
+_PEM_END = re.compile(r"-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----")
 
 
 def is_test_path(path: str) -> bool:
@@ -78,6 +82,51 @@ def read_lines(
     return lines or None
 
 
+@functools.lru_cache(maxsize=128)
+def _scan_pem_lines(path: str, size: int, mtime_ns: int) -> frozenset[int]:
+    """1-based numbers of every line inside a private-key block (header to footer, inclusive).
+
+    A snippet window can sit in the middle of a long key body, where neither the header nor the
+    footer is visible and no per-line pattern matches base64. An unterminated block runs to the end
+    of the scanned part. `size` and `mtime_ns` only key the cache. Reading is bounded.
+    """
+    lines: set[int] = set()
+    inside = False
+    number = 1
+    read = 0
+    try:
+        with open(path, "rb") as handle:
+            while read < MAX_PEM_SCAN_BYTES:
+                chunk = handle.readline(65537)
+                if not chunk:
+                    break
+                read += len(chunk)
+                text = chunk.decode("utf-8", "replace")
+                if _PEM_BEGIN.search(text):
+                    inside = True
+                if inside:
+                    lines.add(number)
+                    if _PEM_END.search(text):
+                        inside = False
+                if chunk.endswith(b"\n"):
+                    number += 1
+    except OSError:
+        return frozenset()
+    return frozenset(lines)
+
+
+def pem_lines(source_root: Path | None, rel_path: str) -> frozenset[int]:
+    """Lines of `rel_path` that belong to a private-key block (empty without readable source)."""
+    path = resolve_inside(source_root, rel_path) if source_root is not None else None
+    if path is None:
+        return frozenset()
+    try:
+        info = path.stat()
+    except OSError:
+        return frozenset()
+    return _scan_pem_lines(str(path), info.st_size, info.st_mtime_ns)
+
+
 def make_snippet(
     source_root: Path | None,
     rel_path: str,
@@ -91,7 +140,7 @@ def make_snippet(
     lines = read_lines(source_root, rel_path, first, last)
     if not lines:
         return None
-    masked = mask_lines(lines[:MAX_SNIPPET_LINES], flagged)
+    masked = mask_lines(lines[:MAX_SNIPPET_LINES], flagged, pem=pem_lines(source_root, rel_path))
     out: list[str] = []
     total = 0
     for number, text in masked:
@@ -110,4 +159,5 @@ def flagged_text(
     lines = read_lines(source_root, rel_path, line_start, min(line_end, line_start + 50))
     if not lines:
         return None
-    return "\n".join(" ".join(text.split()) for _n, text in mask_lines(lines, flagged, 400))
+    masked = mask_lines(lines, flagged, 400, pem=pem_lines(source_root, rel_path))
+    return "\n".join(" ".join(text.split()) for _n, text in masked)

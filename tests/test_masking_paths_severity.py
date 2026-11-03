@@ -53,9 +53,11 @@ def test_masking_keeps_the_key_and_structure_readable():
 @pytest.mark.parametrize(
     "text",
     [
-        "eyJ" "hbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        ".".join(
+            ["ey" + "JhbGciOiJIUzI1NiJ9", "ey" + "JzdWIiOiIxMjM0NTY3ODkwIn0", "dBjftJeZ4CVPmB92K"]
+        ),
         "ghp_" + "a" * 36,
-        "xoxb" "-1234567890-abcdefghij",
+        "xo" + "xb-1234567890-abcdefghij",
         "-----BEGIN RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----",
     ],
 )

@@ -250,6 +250,27 @@ def test_cli_eval_works_without_docker_and_writes_both_files(tmp_path, capsys):
     assert json.loads((tmp_path / "metrics_tool_only.json").read_text("utf-8"))["schema"] == 1
 
 
+def test_committed_baseline_metrics_match_a_fresh_eval_of_the_committed_raw(tmp_path):
+    committed = Path(__file__).resolve().parent.parent / "benchmarks" / "baseline"
+    code = cli.main(
+        [
+            "eval",
+            "--from-raw",
+            str(committed / "raw"),
+            "--source",
+            str(TARGET),
+            "--out-dir",
+            str(tmp_path),
+        ]
+    )
+    assert code == 0
+    for name in ("metrics_tool_only.json", "metrics_tool_only.md"):
+        assert (tmp_path / name).read_bytes() == (committed / name).read_bytes(), (
+            f"{name} is stale: rerun `secaudit eval --from-raw benchmarks/baseline/raw "
+            "--source benchmarks/targets/vuln_python_app`"
+        )
+
+
 def test_cli_eval_exclude_flag(tmp_path, capsys):
     cli.main(
         [

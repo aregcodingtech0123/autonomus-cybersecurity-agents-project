@@ -146,13 +146,13 @@
       "invocations": [
         {
           "executionSuccessful": true,
-          "endTimeUtc": "2026-11-02T21:07:05Z"
+          "endTimeUtc": "2026-11-03T08:18:08Z"
         }
       ],
       "properties": {
         "metrics": {
           "_totals": {
-            "loc": 122,
+            "loc": 42132,
             "nosec": 0,
             "skipped_tests": 0,
             "SEVERITY.UNDEFINED": 0,
@@ -257,6 +257,19 @@
           },
           "./webshop/files.py": {
             "loc": 11,
+            "nosec": 0,
+            "skipped_tests": 0,
+            "SEVERITY.UNDEFINED": 0,
+            "SEVERITY.LOW": 0,
+            "SEVERITY.MEDIUM": 0,
+            "SEVERITY.HIGH": 0,
+            "CONFIDENCE.UNDEFINED": 0,
+            "CONFIDENCE.LOW": 0,
+            "CONFIDENCE.MEDIUM": 0,
+            "CONFIDENCE.HIGH": 0
+          },
+          "./webshop/generated_big_module.py": {
+            "loc": 42010,
             "nosec": 0,
             "skipped_tests": 0,
             "SEVERITY.UNDEFINED": 0,

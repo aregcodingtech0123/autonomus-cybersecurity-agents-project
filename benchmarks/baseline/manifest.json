@@ -1,22 +1,31 @@
 {
   "schema_version": 1,
-  "audit_id": "20261102T210703Z-cc46033a",
+  "audit_id": "20261103T081804Z-06b4cbe7",
   "secaudit_version": "0.1.0",
-  "started_at": "2026-11-02T21:07:03+00:00",
-  "finished_at": "2026-11-02T21:07:19+00:00",
+  "started_at": "2026-11-03T08:18:04+00:00",
+  "finished_at": "2026-11-03T08:18:25+00:00",
   "runner": "docker",
   "input": {
     "kind": "directory",
     "source": "vuln_python_app",
-    "sha256": "8f089299c5ec5230800684aae23aec1f5f811107f4b9a8dbce3c6f50b72ac339",
-    "file_count": 15,
-    "total_bytes": 6365,
+    "sha256": "13f8eff9383ef6d15aa8a3286186f14f2aecba9f234a2e168e19aae926ab237a",
+    "file_count": 16,
+    "total_bytes": 1087651,
     "commit": null,
     "skipped_entries": []
   },
   "workspace_policy_files": [
     ".semgrepignore"
   ],
+  "source": {
+    "retained": true,
+    "path": "source",
+    "injected_files": [
+      ".semgrepignore"
+    ],
+    "restricted_to_owner": true
+  },
+  "neutralized_files": [],
   "tool_order": [
     "bandit",
     "semgrep",
@@ -49,6 +58,10 @@
         "<container>",
         "--label",
         "org.secaudit.managed=true",
+        "--label",
+        "org.secaudit.owner-pid=20692",
+        "--label",
+        "org.secaudit.started=1793693885",
         "--network",
         "none",
         "--read-only",
@@ -77,6 +90,10 @@
         "--env",
         "HOME=/tmp",
         "secaudit/bandit:1.9.4",
+        "timeout",
+        "-k",
+        "5",
+        "610",
         "bandit",
         "-r",
         ".",
@@ -88,9 +105,13 @@
       ],
       "network": "none",
       "exit_code": 1,
-      "duration_s": 0.827,
+      "duration_s": 3.897,
       "artifact": "raw/bandit.sarif",
-      "artifact_sha256": "7d91a5d9fb9c2ad04e953c9172c91376db5770706ff4ade80a48e99e8a719666"
+      "artifact_sha256": "66f7f0a1343dc6467c92fb03251b552664ba288c7e5c85ce750938df2bf18c48",
+      "limitations": [
+        "Files Bandit cannot parse (e.g. syntax errors) are silently omitted: neither the SARIF nor a notification lists them (verified 2026-11-03).",
+        "Only Python source is analysed; no coverage report is produced."
+      ]
     },
     "semgrep": {
       "status": "completed",
@@ -112,6 +133,7 @@
         "--no-rewrite-rule-ids",
         "--quiet",
         "--sarif-output=/out/semgrep.sarif",
+        "--json-output=/out/semgrep.json",
         "."
       ],
       "sandbox_command": [
@@ -124,6 +146,10 @@
         "<container>",
         "--label",
         "org.secaudit.managed=true",
+        "--label",
+        "org.secaudit.owner-pid=20692",
+        "--label",
+        "org.secaudit.started=1793693892",
         "--network",
         "none",
         "--read-only",
@@ -158,6 +184,10 @@
         "--env",
         "SEMGREP_SEND_METRICS=off",
         "secaudit/semgrep:1.183.0",
+        "timeout",
+        "-k",
+        "5",
+        "610",
         "semgrep",
         "scan",
         "--config",
@@ -172,11 +202,12 @@
         "--no-rewrite-rule-ids",
         "--quiet",
         "--sarif-output=/out/semgrep.sarif",
+        "--json-output=/out/semgrep.json",
         "."
       ],
       "network": "none",
       "exit_code": 0,
-      "duration_s": 7.853,
+      "duration_s": 8.09,
       "artifact": "raw/semgrep.sarif",
       "artifact_sha256": "1992d3b1bb7c3daacc438370ed3a3617e1057d5776275f7954451db72ec30a21",
       "ruleset_info": {
@@ -202,7 +233,18 @@
             "bytes": 492566
           }
         ]
-      }
+      },
+      "limitations": [
+        "Files larger than 1,000,000 bytes (--max-target-bytes default) are skipped without any notification in the SARIF (verified 2026-11-03); parse errors, in contrast, are reported as notifications.",
+        "Results depend on the pinned rules snapshot (names + SHA-256 in ruleset_info); coverage is only as broad as those rulesets."
+      ],
+      "extra_artifacts": [
+        {
+          "path": "raw/semgrep.json",
+          "sha256": "600e8d30875bfc265069276c3005981325eb335e6eddb600191c7173a96526f7",
+          "bytes": 19481
+        }
+      ]
     },
     "gitleaks": {
       "status": "completed",
@@ -235,6 +277,10 @@
         "<container>",
         "--label",
         "org.secaudit.managed=true",
+        "--label",
+        "org.secaudit.owner-pid=20692",
+        "--label",
+        "org.secaudit.started=1793693901",
         "--network",
         "none",
         "--read-only",
@@ -263,6 +309,10 @@
         "--env",
         "HOME=/tmp",
         "secaudit/gitleaks:8.30.1",
+        "timeout",
+        "-k",
+        "5",
+        "610",
         "gitleaks",
         "dir",
         ".",
@@ -280,9 +330,14 @@
       ],
       "network": "none",
       "exit_code": 1,
-      "duration_s": 0.701,
+      "duration_s": 0.73,
       "artifact": "raw/gitleaks.sarif",
-      "artifact_sha256": "3442cb07646f457ee335cc36cd57727b93fadc936d7ee8d07106ead597d44139"
+      "artifact_sha256": "3442cb07646f457ee335cc36cd57727b93fadc936d7ee8d07106ead597d44139",
+      "limitations": [
+        "Gitleaks' built-in default config has a path allowlist: secrets under node_modules/, in lock files (go.sum, package-lock.json, poetry.lock), and in .svg and .pdf files were NOT reported (verified in the Phase 1 review, 2026-11-03). The config was deliberately not rewritten in Phase 1.",
+        "Binary files are not scanned (verified 2026-11-03).",
+        "Working tree only: git history is never scanned (.git is excluded from the workspace)."
+      ]
     },
     "pip-audit": {
       "status": "completed",
@@ -312,6 +367,10 @@
         "<container>",
         "--label",
         "org.secaudit.managed=true",
+        "--label",
+        "org.secaudit.owner-pid=20692",
+        "--label",
+        "org.secaudit.started=1793693903",
         "--network",
         "bridge",
         "--read-only",
@@ -340,6 +399,10 @@
         "--env",
         "HOME=/tmp",
         "secaudit/pip-audit:2.10.1",
+        "timeout",
+        "-k",
+        "5",
+        "610",
         "pip-audit",
         "-r",
         "/src/requirements.audit.txt",
@@ -354,9 +417,9 @@
       ],
       "network": "bridge",
       "exit_code": 1,
-      "duration_s": 1.826,
+      "duration_s": 1.85,
       "artifact": "raw/pip-audit.json",
-      "artifact_sha256": "a7ffdbeaa17f9b18a4c0c58dff6f2c743d97ca667ae2d330794c2b4fd4152fb2",
+      "artifact_sha256": "61a8408ef8d29ff0a493980b5632d1a3b5cc91fa6d2c70561b18a6096f75c7d6",
       "requirements_files": [
         "requirements.txt"
       ],
@@ -380,7 +443,11 @@
           "line": 3
         }
       ],
-      "unresolved": []
+      "unresolved": [],
+      "limitations": [
+        "Audits exact pins only (name==version). Unpinned, URL, editable and -r/-c lines are listed under 'unresolved' and are not audited; transitive dependencies are not resolved.",
+        "Environment markers, extras and hashes are dropped before auditing; results depend on the vulnerability service on the scan date."
+      ]
     }
   },
   "summary": {

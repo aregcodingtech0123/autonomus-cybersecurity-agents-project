@@ -216,8 +216,8 @@ cases:
       1,000,000-byte limit applies. The same pattern IS detected by Semgrep's python.flask
       path-traversal-open rule in a small file (verified natively, 2026-11-03), but the big file is in
       neither Semgrep's paths.scanned nor any result; Bandit analyses the file (it appears in its metrics)
-      but has no rule for open(<request data>). Expected: missed by every tool. To be confirmed against the
-      container baseline when it is regenerated.
+      but has no rule for open(<request data>). Missed by every tool in the container baseline
+      (2026-11-03); Semgrep lists the file as skipped in its coverage record.
 
   # ---------------------------------------------------------------- negatives
   - id: N01

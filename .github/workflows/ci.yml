@@ -1,14 +1,18 @@
 # CI for secaudit.
 #
-# NOT RUN LOCALLY: GitHub Actions cannot be executed on a developer machine. This file was only
-# parsed as YAML and checked structurally (tests/test_ci_workflow.py); actionlint was not available.
-# The first run on GitHub is also the first real run of the POSIX-specific tests on a Linux host
-# (Phase 1 only simulated Linux in a container). Read its results before trusting any of it.
+# NOT RUN LOCALLY: GitHub Actions cannot be executed on a developer machine. This file is linted with
+# actionlint (tools/actionlint.py) and checked structurally (tests/test_ci_workflow.py); neither proves
+# that a run succeeds. The first run on GitHub is also the first real run of the POSIX-specific tests on
+# a Linux host (Phase 1 only simulated Linux in a container). Read its results before trusting any of it.
 #
 # Semgrep registry rules are under the Semgrep Rules License v1.0 (docs/DECISIONS.md, ADR-001): the
 # docker job fetches them fresh inside the job with `secaudit rules update` and nothing here uploads
 # or caches them. The strict parity test skips, with a stated reason, if the fetched snapshot
 # differs from the one recorded in benchmarks/baseline/manifest.json.
+#
+# Supply chain: every third-party action is pinned to a full commit SHA (the tag is in the comment and was
+# resolved through the GitHub API, then re-verified). Dependabot (.github/dependabot.yml) proposes bumps
+# and keeps the tag comments current. The only secrets-adjacent surface is the default read-only token.
 
 name: ci
 
@@ -34,15 +38,17 @@ jobs:
     name: lint + tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}
@@ -53,6 +59,9 @@ jobs:
         run: uv run ruff check .
       - name: Ruff format check
         run: uv run ruff format --check .
+      - name: actionlint (workflow syntax, expressions, shell)
+        if: runner.os == 'Linux'
+        run: uv run python tools/actionlint.py
       - name: Ground truth checker
         run: uv run python benchmarks/check_ground_truth.py
       - name: Tests without Docker
@@ -62,11 +71,13 @@ jobs:
     name: docker-marked tests (ubuntu, Linux host)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: ${{ env.UV_VERSION }}
           python-version: ${{ env.PYTHON_VERSION }}

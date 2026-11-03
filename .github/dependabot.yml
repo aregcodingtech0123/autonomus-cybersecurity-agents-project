@@ -1,0 +1,36 @@
+# Dependabot version updates (see docs/DECISIONS.md and docs/SECURITY_POLICY.md).
+#
+# - github-actions: the workflow pins every action to a commit SHA with a `# vX.Y.Z` comment; Dependabot
+#   opens a PR that moves both together. Read the diff of the new SHA before merging.
+# - uv: python dependencies in pyproject.toml / uv.lock.
+# - NOT configured on purpose: the `docker` ecosystem. The scanner images in docker/ are pinned by digest and
+#   their Python dependencies are hash-locked, so a bump is a deliberate re-baseline (rules snapshot, parity
+#   test, SECURITY_POLICY) and not something to merge from a bot.
+# Version updates only open PRs; they never merge anything. Updates younger than the cooldown are held back,
+# which keeps a freshly compromised release from being proposed on day one.
+
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "build"

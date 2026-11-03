@@ -12,7 +12,7 @@ from secaudit.core.normalize.cwe import (
 )
 from secaudit.core.normalize.owasp import load_owasp_map, owasp_category
 
-RAW = Path(__file__).resolve().parent.parent / "benchmarks" / "baseline" / "raw"
+RAW = Path(__file__).resolve().parent / "fixtures" / "phase1_baseline" / "raw"
 
 
 def test_every_category_lists_exactly_the_count_the_official_page_states():

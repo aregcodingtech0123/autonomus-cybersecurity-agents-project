@@ -44,6 +44,8 @@ select = ["E", "F", "I", "UP", "B", "S"]
 # non-root container user can write the output mount; `git`/`docker` are resolved via PATH.
 "src/secaudit/core/**" = ["S103", "S108", "S607"]
 "src/secaudit/cli.py" = ["S607"]
+# evaluation.py renders Markdown report tables: long string literals are the content, not code.
+"src/secaudit/core/evaluation.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

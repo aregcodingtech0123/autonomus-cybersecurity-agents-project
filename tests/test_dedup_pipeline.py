@@ -9,7 +9,7 @@ from secaudit.core.models import RawRef, Severity, ToolHit
 from secaudit.core.normalize.dedup import build_findings, collapse_identical
 from secaudit.core.normalize.pipeline import export_json, normalize_audit
 
-BASELINE = Path(__file__).resolve().parent.parent / "benchmarks" / "baseline"
+BASELINE = Path(__file__).resolve().parent / "fixtures" / "phase1_baseline"
 TARGET = Path(__file__).resolve().parent.parent / "benchmarks" / "targets" / "vuln_python_app"
 PLANTED = [
     "bench_n0" "VQRgmEuLNsKJ4a0ZkKpFxr11",

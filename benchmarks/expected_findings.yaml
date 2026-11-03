@@ -72,7 +72,14 @@ cases:
     anchor: yaml.load(
     cwe: CWE-502
     expected_detecting_tools: [bandit, semgrep]
-    notes: Bandit B506; Semgrep avoid-pyyaml-load.
+    match:
+      - file: webshop/serialization.py
+        line_start: 13
+        line_end: 13
+        cwe: [CWE-502, CWE-20]
+    notes: >
+      Bandit B506 (tagged CWE-20 by Bandit); Semgrep avoid-pyyaml-load (CWE-502). The two tools use different
+      CWE classes for the same issue, so `match` accepts both (Phase 2A).
 
   - id: P05
     title: subprocess with shell=True built from request input
@@ -142,8 +149,13 @@ cases:
     anchor: app.run(debug=True)
     cwe: CWE-489
     expected_detecting_tools: [bandit, semgrep]
+    match:
+      - file: dev_server.py
+        line_start: 14
+        line_end: 14
+        cwe: [CWE-489, CWE-94]
     notes: >
-      Added in Phase 1 (Task 0). Bandit B201 (HIGH/MEDIUM) and Semgrep
+      Added in Phase 1 (Task 0). Bandit B201 (tagged CWE-94) and Semgrep
       python.flask.security.audit.debug-enabled (in p/python) both fire. Together with P08
       this shows the detection depends on a `flask` import in the same file.
 
@@ -155,6 +167,11 @@ cases:
     line_end: 3
     anchor: Flask==2.0.1
     cwe: null
+    match:
+      - file: requirements.txt
+        line_start: 1
+        line_end: 3
+        classes: ["vuln:*"]
     expected_detecting_tools: [pip-audit]
     notes: >
       Verified with pip-audit 2.10.1: Flask 2.0.1 (CVE-2023-30861), PyYAML 5.3.1

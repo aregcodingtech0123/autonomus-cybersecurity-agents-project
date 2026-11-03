@@ -9,6 +9,7 @@ run; 3 input rejected by intake; 4 one or more tools failed/timed out; 5 environ
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -19,14 +20,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from secaudit import __version__
-from secaudit.core import exe
+from secaudit.core import evaluation, exe
 from secaudit.core.executors import reap_stale_containers
 from secaudit.core.intake import DEFAULT_LIMITS, CleanupError, IntakeError
+from secaudit.core.normalize.pipeline import export_json, normalize_audit, normalize_audit_dir
 from secaudit.core.rules import DEFAULT_RULESETS, RulesError, update_rules
 from secaudit.core.sandbox import ResourceLimits, docker_available
 from secaudit.core.scan import ScanEnvironmentError, ScanOptions, run_scan
 from secaudit.core.scanners import TOOL_NAMES, SemgrepAdapter, build_adapters
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTAKE, EXIT_TOOLS, EXIT_ENV, EXIT_CLEANUP = (
     0,
     1,
@@ -132,7 +135,91 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="p/NAME",
         help="ruleset to fetch (repeatable; default: " + " ".join(DEFAULT_RULESETS) + ")",
     )
+    norm = sub.add_parser(
+        "normalize",
+        parents=[debug_parent],
+        help="turn an audit directory's raw outputs into de-duplicated, secret-free findings.json",
+    )
+    norm.add_argument("audit_dir", type=Path, help="directory written by `secaudit scan`")
+    norm.add_argument("--out", type=Path, default=None, help="default: <audit_dir>/findings.json")
+
+    ev = sub.add_parser(
+        "eval",
+        parents=[debug_parent],
+        help="tool-only detection metrics from committed raw outputs (no Docker needed)",
+    )
+    ev.add_argument("--from-raw", type=Path, required=True, help="directory with the raw outputs")
+    ev.add_argument("--source", type=Path, required=True, help="the scanned source tree")
+    ev.add_argument(
+        "--ground-truth", type=Path, default=REPO_ROOT / "benchmarks" / "expected_findings.yaml"
+    )
+    ev.add_argument(
+        "--exclude", action="append", default=[], metavar="ID", help="drop a case (repeatable)"
+    )
+    ev.add_argument("--out-dir", type=Path, default=None, help="default: the parent of --from-raw")
     return parser
+
+
+def _cmd_normalize(args: argparse.Namespace) -> int:
+    audit_dir = args.audit_dir
+    if not (audit_dir / "raw").is_dir():
+        print("error: not an audit directory (no raw/ inside)", file=sys.stderr)
+        return EXIT_USAGE
+    audit = normalize_audit_dir(audit_dir)
+    out = args.out or audit_dir / "findings.json"
+    out.write_text(export_json(audit), encoding="utf-8", newline="\n")
+    raw_total = sum(r.raw_results for r in audit.tool_runs)
+    print(f"{len(audit.findings)} findings from {raw_total} raw results -> {out.name}")
+    for run in audit.tool_runs:
+        counts = f"raw={run.raw_results} unique={run.unique_hits} skipped={run.skipped_results}"
+        print(f"  {run.tool:10} {run.status:10} {counts}")
+    for warning in audit.warnings:
+        print(f"  warning: {warning}", file=sys.stderr)
+    return EXIT_OK
+
+
+def _cmd_eval(args: argparse.Namespace) -> int:
+    raw, source = args.from_raw, args.source
+    for label, path in (
+        ("--from-raw", raw),
+        ("--source", source),
+        ("--ground-truth", args.ground_truth),
+    ):
+        if not path.exists():
+            print(f"error: {label} path does not exist", file=sys.stderr)
+            return EXIT_USAGE
+    truth = evaluation.load_truth(args.ground_truth)
+    for case_id in evaluation.ensure_generated(truth, REPO_ROOT, source):
+        print(f"generated the benchmark file for {case_id}")
+    manifest_path = raw.parent / "manifest.json"
+    manifest = (
+        json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else None
+    )
+    audit = normalize_audit(raw, manifest=manifest, source_root=source)
+    metrics = evaluation.evaluate(
+        audit,
+        truth,
+        manifest=manifest,
+        exclude=tuple(args.exclude),
+        inputs={"ground_truth_sha256": evaluation.sha256_file(args.ground_truth)},
+    )
+    out_dir = args.out_dir or raw.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metrics_tool_only.json").write_text(
+        evaluation.metrics_json(metrics), encoding="utf-8", newline="\n"
+    )
+    (out_dir / "metrics_tool_only.md").write_text(
+        evaluation.render_markdown(metrics), encoding="utf-8", newline="\n"
+    )
+    s = metrics["summary"]
+    pos, neg, fnd = s["positives"], s["negatives"], s["findings"]
+    missed = ", ".join(pos["missed"]) or "none"
+    print(f"positives detected {pos['detected']}/{pos['total']} (missed: {missed})")
+    flagged = ", ".join(neg["flagged"]) or "none"
+    print(f"negatives flagged  {len(neg['flagged'])}/{neg['total']} ({flagged})")
+    print(f"findings {fnd['total']} from {fnd['raw_results']} raw; {fnd['unlabeled']} unlabeled")
+    print(f"wrote metrics_tool_only.json/.md to {out_dir.name}")
+    return EXIT_OK
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -248,6 +335,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_build_images(args)
         if args.command == "rules":
             return _cmd_rules_update(args)
+        if args.command == "normalize":
+            return _cmd_normalize(args)
+        if args.command == "eval":
+            return _cmd_eval(args)
     except KeyboardInterrupt:
         print("interrupted", file=sys.stderr)
         return EXIT_ERROR

@@ -7,7 +7,7 @@ import pytest
 from secaudit.core.normalize.pip_audit import parse_pip_audit
 from secaudit.core.normalize.sarif import parse_sarif
 
-BASELINE = Path(__file__).resolve().parent.parent / "benchmarks" / "baseline"
+BASELINE = Path(__file__).resolve().parent / "fixtures" / "phase1_baseline"
 RAW = BASELINE / "raw"
 PLANTED = [
     "not-a-real-password-benchmark-fake",

@@ -115,6 +115,10 @@ Every rejection raises `IntakeError` with a stable reason code. Defaults (all co
   touches it, so the -wal/-shm files inherit it); Windows icacls by SID on the file and, for the default
   location, its directory. Administrators and SYSTEM can still take ownership. On Windows a grant with
   `(OI)(CI)` on a file leaves an empty ACL; `restrict_to_owner` uses the plain grant for files.
+- **POSIX claims are not yet verified on a real Linux host.** The `0700`/`0600` modes, the `--user <host uid>`
+  mapping, symlink/FIFO/hard-link rejection and multi-user cleanup above were exercised on a Windows host with
+  Linux containers only. `docs/PHASE1_NOTES.md` ("POSIX / Linux verification status") lists each claim with its
+  status and the CI run id once one exists; until a row says VERIFIED with a run id, read it as simulated.
 - **Terminal output is escaped.** Every scanned value the CLI prints (paths, titles, rule text, input names)
   passes `cliout.safe`, which removes ANSI/OSC sequences, control, bidi and zero-width characters. The HTML
   report additionally strips them before HTML-escaping, has no script, no external resource and a CSP pinned to

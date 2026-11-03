@@ -225,6 +225,39 @@ container simulating two users; behaviour on real Linux/macOS hosts is unverifie
 - **Windows host only.** POSIX behaviour (symlinks, FIFOs, devices, hard links, file modes, multi-user cleanup) is tested
   in a Linux container via `tests/linux_probe.py`, not on a real Linux/macOS host. `--user <host uid>` and
   `NoDefaultCurrentDirectoryInExePath` outside Windows are unverified. No permission hardening exists on Windows.
+  Status per claim, and what a real runner would add, is in **"POSIX / Linux verification status"** below.
+
+## POSIX / Linux verification status
+
+Source of truth for which POSIX claims are **VERIFIED on a real Linux runner** and which are still only
+**simulated**. Nothing in the "Run" column is filled in until a GitHub Actions run of `.github/workflows/ci.yml`
+has actually executed and its result has been read; a claim is never marked VERIFIED from a local run.
+(State at the time of writing: the workflow had never run; the repository on GitHub was empty.)
+
+What "simulated" means here: `tests/linux_probe.py` starts a throwaway Linux container (as root, with a tmpfs and a
+few capabilities) on a Windows host with Docker Desktop. That exercises Linux syscalls but not a Linux *host*: the
+daemon, the bind-mount ownership, the invoking uid and the filesystem under the audit directory were still
+Windows/Docker Desktop's. On the runner the `docker` job runs the same probes (so they test the same thing on a
+real engine), and the `lint-test` job additionally runs the host-native POSIX branches as the non-root `runner`
+user, which has never happened before.
+
+| # | Claim | Existing evidence (all on a Windows host) | Exercised on the runner by | Status | Run |
+|---|---|---|---|---|---|
+| 1 | Symlinks: one leaving the input rejects the input; internal ones are skipped and never recreated | `TestRealLinuxLinks` (probe); native test skipped on this host (account may not create symlinks) | `docker` job (probe) and `lint-test`/ubuntu (native `test_real_symlink_escape_rejected`, `test_internal_symlink_is_skipped_not_copied`) | simulated | - |
+| 2 | FIFOs, devices and sockets reject the input | `test_special_files_reject_the_input` (probe) | `docker` job | simulated | - |
+| 3 | Hard links (to outside files, or two inside) reject the input | `test_hardlink_rejected_on_linux_too` (probe); native tests ran on NTFS | `docker` job (probe) and `lint-test`/ubuntu (native `test_hardlink_*`) | simulated | - |
+| 4 | Audit dir `0700`, raw files and manifest `0600` with a permissive umask | `test_posix_audit_directory_and_raw_files_are_private` (probe) | `docker` job | simulated | - |
+| 5 | Owner-only retained source and database (`restrict_to_owner`, `make_tree_readonly`, DB `0600` incl. -wal/-shm) | POSIX branches never ran natively; the Windows ACL branches did | `lint-test`/ubuntu (`test_store.py::test_posix_database_files_are_owner_only`, `test_source_retention.py`) | **untested on POSIX natively** | - |
+| 6 | Containers run as the host `uid:gid` on POSIX; output belongs to the host user | `test_container_user_selection` (pure function, all OS values mocked) | `docker` job: real scans as the runner uid with bind mounts | simulated | - |
+| 7 | Cleanup of read-only trees, never chmods through a symlink, fails loudly | `TestCleanupInLinux` (probe, root plus simulated second user) | `docker` job (probe); `lint-test`/ubuntu (native `remove_tree` tests) | simulated | - |
+| 8 | Multi-user cleanup | probe with users created inside the container | `docker` job (same probe) | simulated; a real second host user is **not** exercised even on the runner | - |
+| 9 | `NoDefaultCurrentDirectoryInExePath` and the `core/exe.py` resolver off Windows | Windows only; POSIX branch noted "unverified" | `lint-test`/ubuntu (`test_exe.py` POSIX branches) | **unverified** | - |
+| 10 | Sandbox flag set holds on a native Linux Docker engine (`docker inspect` HostConfig, read-only rootfs, no network, non-root) | `test_docker_inspect_matches_expected_hostconfig`, `test_sandbox_properties_in_a_real_container` on Docker Desktop | `docker` job | simulated (Docker Desktop VM only) | - |
+
+When a run exists: for each row record the run id or URL, then change the status to **VERIFIED (run &lt;id&gt;)**,
+or to **FAILED (run &lt;id&gt;): &lt;what&gt;** with the finding and its fix. A failing row is a real finding, never
+something to skip or xfail. Rows 5 and 9 have never executed their POSIX branches on any POSIX host, so a first
+failure there is expected evidence, not a surprise.
 - **Git intake needs a `git` executable on the host** and an allow-listed host (default: github.com,
   gitlab.com, bitbucket.org, codeberg.org; extend with `--allow-git-host`).
 - **Not done:** image signature/attestation verification, SBOMs, vulnerability scanning of our own images.

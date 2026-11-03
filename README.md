@@ -94,6 +94,10 @@ uv run secaudit findings list --out /tmp/audits
 stat -c '%a %n' /tmp/audits /tmp/audits/secaudit.db /tmp/audits/*/raw/*   # expect 700, 600, 600
 ```
 
+Workflow lint (downloads the pinned actionlint release once and verifies its SHA-256):
+`uv run python tools/actionlint.py`. The per-claim status of the POSIX tests is in
+`docs/PHASE1_NOTES.md` ("POSIX / Linux verification status"); fill in its Run column from the first CI run.
+
 What to look for: `test_parity_exact_match_with_recorded_baseline` is **skipped with a stated reason** when the
 Semgrep rules you just fetched differ from the recorded snapshot; that is expected and not a failure. Any
 other failure in step 1 or 2 is a real Linux finding to report, not to skip (`--user <host uid>` handling and

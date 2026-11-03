@@ -259,7 +259,7 @@ def test_posix_restrict_to_owner_gives_files_0600_and_directories_0700(tmp_path)
     directory.mkdir()
     file = directory / "f.db"
     file.write_bytes(b"x")
-    os.chmod(directory, 0o755)
+    os.chmod(directory, 0o755)  # noqa: S103 - deliberately permissive start state
     os.chmod(file, 0o644)
     assert restrict_to_owner(directory) and restrict_to_owner(file)
     assert stat.S_IMODE(directory.stat().st_mode) == 0o700

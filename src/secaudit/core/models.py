@@ -81,7 +81,9 @@ class ToolHit(_Model):
     tool: str
     tool_version: str | None = None
     rule_id: str = Field(max_length=300)  # [UNTRUSTED] chosen by the rule author
-    raw_severity: str | None = None  # exactly as emitted, null if the tool emits none
+    rule_name: str | None = Field(default=None, max_length=200)  # [UNTRUSTED] masked short title
+    raw_severity: str | None = None  # exactly as emitted (Semgrep: rule level), null if none
+    confidence: Confidence = Confidence.UNKNOWN
     message: str = Field(
         max_length=MAX_MESSAGE_CHARS
     )  # [UNTRUSTED] masked; rule text may quote code
@@ -89,6 +91,8 @@ class ToolHit(_Model):
     line_start: int = Field(ge=1)
     line_end: int = Field(ge=1)
     cwe_ids: tuple[str, ...] = ()
+    aliases: tuple[str, ...] = ()  # pip-audit: advisory ids (PYSEC / GHSA / CVE)
+    fix_versions: tuple[str, ...] = ()
     raw_ref: RawRef
 
     @field_validator("file_path")

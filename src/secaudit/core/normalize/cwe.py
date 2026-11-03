@@ -20,7 +20,7 @@ CLASS_EQUIVALENCE: dict[str, str] = {
 
 
 def normalize_cwe(text: str) -> str | None:
-    """`external/cwe/cwe-94`, `CWE-489: Active Debug Code`, `cwe_79` -> `CWE-94`, `CWE-489`, `CWE-79`."""
+    """`external/cwe/cwe-94`, `CWE-489: Active Debug Code`, `cwe_79` -> `CWE-94`, ..., `CWE-79`."""
     match = _CWE_RE.search(text or "")
     return f"CWE-{int(match.group(1))}" if match else None
 

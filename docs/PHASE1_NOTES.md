@@ -247,17 +247,35 @@ user, which has never happened before.
 | 2 | FIFOs, devices and sockets reject the input | `test_special_files_reject_the_input` (probe) | `docker` job | simulated | - |
 | 3 | Hard links (to outside files, or two inside) reject the input | `test_hardlink_rejected_on_linux_too` (probe); native tests ran on NTFS | `docker` job (probe) and `lint-test`/ubuntu (native `test_hardlink_*`) | simulated | - |
 | 4 | Audit dir `0700`, raw files and manifest `0600` with a permissive umask | `test_posix_audit_directory_and_raw_files_are_private` (probe) | `docker` job | simulated | - |
-| 5 | Owner-only retained source and database (`restrict_to_owner`, `make_tree_readonly`, DB `0600` incl. -wal/-shm) | POSIX branches never ran natively; the Windows ACL branches did | `lint-test`/ubuntu (`test_store.py::test_posix_database_files_are_owner_only`, `test_source_retention.py`) | **untested on POSIX natively** | - |
+| 5 | Owner-only retained source and database (`restrict_to_owner`, `make_tree_readonly`, DB `0600` incl. -wal/-shm) | POSIX branches never ran natively; the Windows ACL branches did | `lint-test`/ubuntu (`test_store.py::test_posix_database_files_are_owner_only`, `test_source_retention.py`) | simulated; native POSIX branch ran once in the Linux-container pre-flight and found a real bug (fixed); no runner yet | - |
 | 6 | Containers run as the host `uid:gid` on POSIX; output belongs to the host user | `test_container_user_selection` (pure function, all OS values mocked) | `docker` job: real scans as the runner uid with bind mounts | simulated | - |
 | 7 | Cleanup of read-only trees, never chmods through a symlink, fails loudly | `TestCleanupInLinux` (probe, root plus simulated second user) | `docker` job (probe); `lint-test`/ubuntu (native `remove_tree` tests) | simulated | - |
 | 8 | Multi-user cleanup | probe with users created inside the container | `docker` job (same probe) | simulated; a real second host user is **not** exercised even on the runner | - |
-| 9 | `NoDefaultCurrentDirectoryInExePath` and the `core/exe.py` resolver off Windows | Windows only; POSIX branch noted "unverified" | `lint-test`/ubuntu (`test_exe.py` POSIX branches) | **unverified** | - |
+| 9 | `NoDefaultCurrentDirectoryInExePath` and the `core/exe.py` resolver off Windows | Windows only; POSIX branch noted "unverified" | `lint-test`/ubuntu (`test_exe.py` POSIX branches) | unverified on a runner; POSIX branches passed in the pre-flight | - |
 | 10 | Sandbox flag set holds on a native Linux Docker engine (`docker inspect` HostConfig, read-only rootfs, no network, non-root) | `test_docker_inspect_matches_expected_hostconfig`, `test_sandbox_properties_in_a_real_container` on Docker Desktop | `docker` job | simulated (Docker Desktop VM only) | - |
+
+### Pre-flight on a Linux container (before any CI run; NOT runner evidence)
+
+On 2026-11-03 the non-Docker suite (`pytest -m "not docker"`) was run natively inside a `python:3.13-slim` Linux
+container (kernel 6.18 WSL2, repository copied in rather than bind-mounted, git installed, executed as the
+unprivileged uid 1001 through `setpriv`). It is a real Linux kernel and a real unprivileged user, but it is still
+Docker Desktop's VM, not a GitHub runner, so it changes **no** row above to VERIFIED. It did run, for the first time,
+the host-native POSIX branches behind rows 1, 3, 5 and 9, and it found two failures that no Windows run could show:
+
+| Failure | Class | Root cause | Fix | Regression test |
+|---|---|---|---|---|
+| `test_posix_database_files_are_owner_only`: `p.db` had mode `0o700`, expected `0o600` | (b) real POSIX bug | `restrict_to_owner` called `chmod 0o700` on files as well as directories, giving files an execute bit; the Windows run took the ACL branch | `0o700` for directories, `0o600` for files (`core/retention.py`) | `test_posix_restrict_to_owner_gives_files_0600_and_directories_0700`, `test_posix_database_files_are_owner_only` |
+| `test_manifest_and_raw_outputs`: a host path was found in the manifest | (a) test bug (test double) | `FakeExecutor.paths` handed out the host out-dir (`as_posix()`) where `DockerExecutor` uses `/out`; real manifests are clean (`benchmarks/baseline/manifest.json`). On Windows the assertion could never match: `str(path)` has single backslashes, the JSON blob has doubled ones | the fake now returns `/out`; the assertion checks native, POSIX and JSON-escaped spellings | the strengthened `test_manifest_and_raw_outputs` (red on Windows too before the fix) |
+
+After the fixes: 703 passed, 12 skipped (all Windows-only or opt-in gates), 63 docker-marked tests deselected
+(no Docker inside the container). The 63 docker-marked tests, and rows 2, 4, 6, 7, 8 and 10, still need the
+`docker` job on a real runner. Row 5 now has one native POSIX data point (the two tests above); row 9's POSIX
+resolver branches ran, but the Windows-only parts of `test_exe.py` were skipped by design.
 
 When a run exists: for each row record the run id or URL, then change the status to **VERIFIED (run &lt;id&gt;)**,
 or to **FAILED (run &lt;id&gt;): &lt;what&gt;** with the finding and its fix. A failing row is a real finding, never
-something to skip or xfail. Rows 5 and 9 have never executed their POSIX branches on any POSIX host, so a first
-failure there is expected evidence, not a surprise.
+something to skip or xfail. Row 5's POSIX branch had never executed anywhere before the pre-flight and failed there first, which is
+why a first failure on the runner is expected evidence, not a surprise.
 - **Git intake needs a `git` executable on the host** and an allow-listed host (default: github.com,
   gitlab.com, bitbucket.org, codeberg.org; extend with `--allow-git-host`).
 - **Not done:** image signature/attestation verification, SBOMs, vulnerability scanning of our own images.

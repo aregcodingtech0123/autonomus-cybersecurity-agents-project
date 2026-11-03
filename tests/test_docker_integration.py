@@ -251,7 +251,7 @@ def test_full_scan_via_docker_produces_four_raw_outputs(scan_outcome):
     }
     assert manifest["runner"] == "docker" and manifest["summary"]["completed"] == 4
     assert sorted(p.name for p in (audit / "raw").iterdir()) == [
-        "bandit.sarif", "gitleaks.sarif", "pip-audit.json", "semgrep.sarif",
+        "bandit.sarif", "gitleaks.sarif", "pip-audit.json", "semgrep.json", "semgrep.sarif",
     ]  # fmt: skip
     for tool in TOOL_NAMES:
         entry = manifest["tools"][tool]

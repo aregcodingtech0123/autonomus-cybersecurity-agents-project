@@ -19,31 +19,29 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from secaudit import __version__
+from secaudit import __version__, cli_store
 from secaudit.cliout import safe
 from secaudit.core import evaluation, exe
 from secaudit.core.executors import reap_stale_containers
 from secaudit.core.intake import DEFAULT_LIMITS, CleanupError, IntakeError
+from secaudit.core.models import Severity
 from secaudit.core.normalize.pipeline import export_json, normalize_audit, normalize_audit_dir
-from secaudit.core.retention import AuditNotFoundError, delete_audit
 from secaudit.core.rules import DEFAULT_RULESETS, RulesError, update_rules
 from secaudit.core.sandbox import ResourceLimits, docker_available
 from secaudit.core.scan import ScanEnvironmentError, ScanOptions, run_scan
 from secaudit.core.scanners import TOOL_NAMES, SemgrepAdapter, build_adapters
-from secaudit.store.db import DB_FILENAME, open_database, secure_database
-from secaudit.store.ingest import IngestError, ingest_audit_dir
-from secaudit.store.repo import AuditConflictError, Repository
+from secaudit.exitcodes import (
+    EXIT_CLEANUP,
+    EXIT_ENV,
+    EXIT_ERROR,
+    EXIT_INTAKE,
+    EXIT_OK,
+    EXIT_TOOLS,
+    EXIT_USAGE,
+)
+from secaudit.store.db import DB_FILENAME
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTAKE, EXIT_TOOLS, EXIT_ENV, EXIT_CLEANUP = (
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-)
 NATIVE_WARNING = (
     "WARNING: --runner native executes scanner tools directly on this machine with NO sandbox. "
     "Scanned content is untrusted; only use this for code you trust."
@@ -122,6 +120,10 @@ def build_parser() -> argparse.ArgumentParser:
                       help="additional Git host to allow (repeatable)")  # fmt: skip
     scan.add_argument("--timeout", type=float, default=ResourceLimits().timeout_s,
                       help="per-tool wall-clock timeout in seconds")  # fmt: skip
+    scan.add_argument("--db", type=Path, default=None,
+                      help=f"SQLite database (default: <out>/{DB_FILENAME})")  # fmt: skip
+    scan.add_argument("--raw-only", action="store_true",
+                      help="stop after the scanners: no normalize / database / report")  # fmt: skip
 
     build = sub.add_parser(
         "build-images", parents=[debug_parent], help="build the pinned scanner Docker images"
@@ -148,9 +150,48 @@ def build_parser() -> argparse.ArgumentParser:
         "delete", help="delete an audit directory (including read-only source)"
     )
     delete.add_argument("audit_id", help="e.g. 20261102T233334Z-15f810f2")
-    delete.add_argument(
-        "--out", type=Path, default=Path("audits"), help="output root (default: ./audits)"
+    for sub_parser in (delete, audit_sub.add_parser("list", help="list the stored audits")):
+        sub_parser.add_argument(
+            "--out", type=Path, default=Path("audits"), help="output root (default: ./audits)"
+        )
+        sub_parser.add_argument(
+            "--db", type=Path, default=None, help=f"default: <out>/{DB_FILENAME}"
+        )
+
+    findings = sub.add_parser("findings", parents=[debug_parent], help="inspect stored findings")
+    findings_sub = findings.add_subparsers(dest="findings_command", required=True)
+    flist = findings_sub.add_parser("list", help="list the findings of an audit (default: latest)")
+    flist.add_argument("--audit", default=None, help="audit id (default: the latest audit)")
+    flist.add_argument("--severity", type=str.upper, default=None,
+                       choices=[s.value for s in Severity])  # fmt: skip
+    flist.add_argument("--tool", default=None, choices=TOOL_NAMES)
+    fshow = findings_sub.add_parser("show", help="show one finding with its evidence")
+    fshow.add_argument("finding_id", help="e.g. F-0123456789ab")
+    fshow.add_argument("--audit", default=None, help="audit id (default: latest audit with it)")
+    for sub_parser in (flist, fshow):
+        sub_parser.add_argument(
+            "--out", type=Path, default=Path("audits"), help="output root (default: ./audits)"
+        )
+        sub_parser.add_argument(
+            "--db", type=Path, default=None, help=f"default: <out>/{DB_FILENAME}"
+        )
+
+    rep = sub.add_parser(
+        "report", parents=[debug_parent], help="print or write the report of a stored audit"
     )
+    rep.add_argument("audit_id")
+    rep.add_argument("--format", choices=("json", "html"), default="html")
+    rep.add_argument("--out", type=Path, default=None, help="write to this file (default: stdout)")
+    rep.add_argument(
+        "--db",
+        type=Path,
+        default=Path("audits") / DB_FILENAME,
+        help="default: ./audits/" + DB_FILENAME,
+    )
+    rep.add_argument(
+        "--ground-truth", type=Path, default=None,
+        help="benchmark ground truth: also list related-informational findings",
+    )  # fmt: skip
 
     norm = sub.add_parser(
         "normalize",
@@ -186,19 +227,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_audit_delete(args: argparse.Namespace) -> int:
-    try:
-        delete_audit(args.out, args.audit_id)
-    except AuditNotFoundError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return EXIT_USAGE
-    except CleanupError as exc:
-        print(f"cleanup failed, delete these leftovers manually: {exc}", file=sys.stderr)
-        return EXIT_CLEANUP
-    print(f"deleted audit {args.audit_id}")
-    return EXIT_OK
-
-
 def _cmd_normalize(args: argparse.Namespace) -> int:
     audit_dir = args.audit_dir
     if not (audit_dir / "raw").is_dir():
@@ -213,29 +241,7 @@ def _cmd_normalize(args: argparse.Namespace) -> int:
         counts = f"raw={run.raw_results} unique={run.unique_hits} skipped={run.skipped_results}"
         print(f"  {run.tool:10} {run.status:10} {counts}")
     for warning in audit.warnings:
-        print(f"  warning: {warning}", file=sys.stderr)
-    return EXIT_OK
-
-
-def _cmd_ingest(args: argparse.Namespace) -> int:
-    audit_dir = args.audit_dir
-    db_path = args.db or audit_dir.resolve().parent / DB_FILENAME
-    engine = open_database(db_path, restrict_parent=args.db is None)
-    try:
-        result = ingest_audit_dir(Repository(engine), audit_dir, replace=args.replace)
-    except IngestError as exc:
-        print(f"error: {safe(exc)}", file=sys.stderr)
-        return EXIT_USAGE if exc.kind == "usage" else EXIT_INTAKE
-    except AuditConflictError as exc:
-        print(f"error: {safe(exc)}", file=sys.stderr)
-        return EXIT_INTAKE
-    finally:
-        engine.dispose()
-    secure_database(db_path, restrict_parent=args.db is None)
-    print(
-        f"audit {safe(result.audit_id)}: {result.status} "
-        f"({result.findings} findings, {result.hits} hits) in {db_path.name}"
-    )
+        print(f"  warning: {safe(warning)}", file=sys.stderr)
     return EXIT_OK
 
 
@@ -311,19 +317,19 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     try:
         outcome = run_scan(args.input, options)
     except IntakeError as exc:
-        print(f"input rejected [{exc.reason.value}]: {exc.detail}", file=sys.stderr)
+        print(f"input rejected [{exc.reason.value}]: {safe(exc.detail)}", file=sys.stderr)
         return EXIT_INTAKE
     except ScanEnvironmentError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ENV
     except CleanupError as exc:
-        print(f"cleanup failed, delete these leftovers manually: {exc}", file=sys.stderr)
+        print(f"cleanup failed, delete these leftovers manually: {safe(exc)}", file=sys.stderr)
         return EXIT_CLEANUP
     manifest = outcome.manifest
     print(f"audit {manifest['audit_id']} -> {outcome.audit_dir.as_posix()}")
     for name in manifest["tool_order"]:
         tool = manifest["tools"][name]
-        extra = f" ({tool['detail']})" if tool["detail"] else ""
+        extra = f" ({safe(tool['detail'])})" if tool["detail"] else ""
         print(
             f"  {name:10} {tool['status']:9} exit={tool['exit_code']}  {tool['duration_s']}s{extra}"
         )
@@ -339,7 +345,22 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             f"source retained at {where} ({access}); it may contain secrets - "
             f"remove with: secaudit audit delete {manifest['audit_id']}"
         )
-    return EXIT_OK if outcome.tools_ok else EXIT_TOOLS
+    status = EXIT_OK if outcome.tools_ok else EXIT_TOOLS
+    if args.raw_only or not (outcome.audit_dir / "manifest.json").is_file():
+        return status
+    try:
+        cli_store.postprocess_scan(
+            outcome.audit_dir, cli_store.db_path(args), restrict_parent=args.db is None
+        )
+    except Exception as exc:  # noqa: BLE001 - the scan itself succeeded; say how to finish
+        print(
+            f"the scan finished but post-processing failed; the audit is kept at "
+            f"{safe(outcome.audit_dir.as_posix())}. Retry: secaudit normalize <audit_dir>, then "
+            "secaudit ingest <audit_dir>",
+            file=sys.stderr,
+        )
+        return _internal_error(exc, bool(getattr(args, "debug", False)))
+    return status
 
 
 def _cmd_build_images(args: argparse.Namespace) -> int:
@@ -410,11 +431,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "rules":
             return _cmd_rules_update(args)
         if args.command == "audit":
-            return _cmd_audit_delete(args)
+            if args.audit_command == "list":
+                return cli_store.cmd_audit_list(args)
+            return cli_store.cmd_audit_delete(args)
+        if args.command == "findings":
+            if args.findings_command == "list":
+                return cli_store.cmd_findings_list(args)
+            return cli_store.cmd_findings_show(args)
+        if args.command == "report":
+            return cli_store.cmd_report(args)
         if args.command == "normalize":
             return _cmd_normalize(args)
         if args.command == "ingest":
-            return _cmd_ingest(args)
+            return cli_store.cmd_ingest(args)
         if args.command == "eval":
             return _cmd_eval(args)
     except KeyboardInterrupt:

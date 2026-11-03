@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="{{ csp }}">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>secaudit report {{ audit.audit_id or "(no audit id)" }}</title>
+<style>{{ css }}</style>
+</head>
+<body>
+<h1>Security audit report</h1>
+<p class="note">Built from normalized findings only. Source snippets are masked; raw scanner output is not included. Everything below that came from the scanned project (paths, rule text, code) is shown as inert text.</p>
+
+<table>
+<tr><th>Audit</th><td>{{ audit.audit_id or "unknown" }}</td></tr>
+<tr><th>Created</th><td>{{ audit.created_at or "unknown" }}</td></tr>
+<tr><th>Runner</th><td>{{ audit.runner or "unknown" }}</td></tr>
+<tr><th>Input</th><td>{{ audit.input.kind or "unknown" }}: {{ audit.input.source or "unknown" }}</td></tr>
+<tr><th>secaudit / schema</th><td>{{ audit.secaudit_version or "unknown" }} / {{ audit.schema_version }}</td></tr>
+<tr><th>Source copy</th><td>kept at scan time: {{ audit.source.retained_at_scan if audit.source.retained_at_scan is not none else "unknown" }}; readable for this report: {{ "yes" if audit.source.available else "no (snippets omitted, fingerprints are location-based)" }}</td></tr>
+</table>
+
+<h2>Summary</h2>
+<p><strong>{{ total }}</strong> findings.</p>
+<table>
+<tr><th>Severity</th><th>Findings</th></tr>
+{% for name, n in severities %}
+<tr><td><span class="sev sev-{{ name|lower }}">{{ name }}</span></td><td>{{ n }}</td></tr>
+{% else %}
+<tr><td colspan="2">no findings</td></tr>
+{% endfor %}
+</table>
+<table>
+<tr><th>Tool</th><th>Status</th><th>Version</th><th>Raw results</th><th>Unique hits</th><th>Skipped results</th><th>Findings containing it</th></tr>
+{% for run in audit.tool_runs %}
+<tr><td>{{ run.tool }}</td><td>{{ run.status }}</td><td>{{ run.version or "unknown" }}</td><td>{{ run.raw_results }}</td><td>{{ run.unique_hits }}</td><td>{{ run.skipped_results }}</td><td>{{ dict(tools).get(run.tool, 0) }}</td></tr>
+{% endfor %}
+</table>
+<table>
+<tr><th>OWASP Top 10:2025</th><th>Findings</th></tr>
+{% for cid, name, n in owasp %}
+<tr><td>{{ cid }}{% if name %} {{ name }}{% endif %}{% if cid == "unmapped" %} (no category for the CWE, or no CWE){% endif %}</td><td>{{ n }}</td></tr>
+{% else %}
+<tr><td colspan="2">none</td></tr>
+{% endfor %}
+</table>
+{% if audit.unmapped_cwes %}
+<p class="note">CWEs without an OWASP Top 10:2025 category: {{ audit.unmapped_cwes|join(", ") }}</p>
+{% endif %}
+
+<h2>Scan coverage &amp; limitations</h2>
+<p class="note">"unknown" means the tool did not say what it looked at; it never means complete.</p>
+{% for c in audit.coverage %}
+<h3>{{ c.tool }}: coverage {{ c.status }}</h3>
+{% if c.note %}<p class="note">{{ c.note }}</p>{% endif %}
+{% if c.analyzed_files is not none %}<p>{{ c.analyzed_files|length }} files analysed.</p>{% endif %}
+{% if c.skipped_files %}
+<p><strong>{{ c.skipped_files|length }} file(s) NOT analysed:</strong></p>
+<ul>
+{% for s in c.skipped_files[:max_listed] %}
+<li><code>{{ s.path }}</code>{% if s.reason %}: {{ s.reason }}{% endif %}</li>
+{% endfor %}
+{% if c.skipped_files|length > max_listed %}
+<li>... and {{ c.skipped_files|length - max_listed }} more</li>
+{% endif %}
+</ul>
+{% endif %}
+{% if c.limitations %}
+<p>Declared limitations:</p>
+<ul>
+{% for lim in c.limitations %}
+<li>{{ lim }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+{% else %}
+<p>No coverage information.</p>
+{% endfor %}
+
+<h2>Findings</h2>
+<table>
+<tr><th>ID</th><th>Severity</th><th>Location</th><th>Issue</th><th>OWASP</th><th>Tools</th></tr>
+{% for f in findings %}
+<tr><td><a href="#finding-{{ f.id }}">{{ f.id }}</a></td><td><span class="sev sev-{{ f.severity.value|lower }}">{{ f.severity.value }}</span></td><td><code>{{ f.file_path }}:{{ f.line_start }}{% if f.line_end != f.line_start %}-{{ f.line_end }}{% endif %}</code>{% if f.is_test_path %} (test code){% endif %}</td><td>{{ f.title }}<br><span class="note">{{ f.issue_class }}{% if f.cwe_ids %} / {{ f.cwe_ids|join(", ") }}{% endif %}</span></td><td>{{ f.owasp_2025 or "-" }}</td><td>{{ f.tools|join(", ") }}</td></tr>
+{% else %}
+<tr><td colspan="6">no findings</td></tr>
+{% endfor %}
+</table>
+
+<h2>Evidence</h2>
+{% for f in findings %}
+<details id="finding-{{ f.id }}">
+<summary><span class="sev sev-{{ f.severity.value|lower }}">{{ f.severity.value }}</span> {{ f.id }}: {{ f.title }} (<code>{{ f.file_path }}:{{ f.line_start }}</code>)</summary>
+<p>Severity basis: {{ f.severity_basis }}. Confidence: {{ f.confidence.value }}. Fingerprint basis: {{ f.fingerprint_basis }}.{% if f.aliases %} Advisories: {{ f.aliases|join(", ") }}.{% endif %}{% if f.fix_versions %} Fixed in: {{ f.fix_versions|join(", ") }}.{% endif %}</p>
+{% if f.snippet %}
+<pre>{{ f.snippet }}</pre>
+{% else %}
+<p class="note">No source snippet (source not available when the report was normalized).</p>
+{% endif %}
+<table>
+<tr><th>Tool</th><th>Rule</th><th>Raw severity</th><th>Confidence</th><th>Message</th><th>Raw result</th></tr>
+{% for h in f.hits %}
+<tr><td>{{ h.tool }}{% if h.tool_version %} {{ h.tool_version }}{% endif %}</td><td>{{ h.rule_id }}{% if h.rule_name %}<br><span class="note">{{ h.rule_name }}</span>{% endif %}</td><td>{{ h.raw_severity or "none" }}</td><td>{{ h.confidence.value }}</td><td>{{ h.message }}{% if h.package %}<br>package {{ h.package }} {{ h.package_version }}{% endif %}</td><td><code>{{ h.raw_ref.artifact }}{{ h.raw_ref.pointer }}</code></td></tr>
+{% endfor %}
+</table>
+</details>
+{% endfor %}
+
+<h2>Related informational</h2>
+{% if related is none %}
+<p class="note">No ground-truth labeling was supplied, so no findings are classed as related informational.</p>
+{% elif related %}
+<p class="note">Import-level noise that exists only because of another finding. Not detections and not false positives.</p>
+<table>
+<tr><th>Case</th><th>Related to</th><th>Rules</th><th>Findings</th></tr>
+{% for item in related %}
+<tr><td>{{ item.case }}</td><td>{{ item.related_to }}</td><td>{{ item.rules|join(", ") }}</td><td>{% for f in item.findings %}<a href="#finding-{{ f.id }}">{{ f.id }}</a> <code>{{ f.file }}:{{ f.line }}</code> {% endfor %}</td></tr>
+{% endfor %}
+</table>
+{% else %}
+<p class="note">None.</p>
+{% endif %}
+
+<h2>Warnings and skipped results</h2>
+{% if audit.warnings %}
+<ul>
+{% for w in audit.warnings %}
+<li>{{ w }}</li>
+{% endfor %}
+</ul>
+{% else %}
+<p>No warnings.</p>
+{% endif %}
+{% if skipped_counts %}
+<table>
+<tr><th>Tool</th><th>Reason a raw result was not turned into a finding</th><th>Count</th></tr>
+{% for tool, reason, n in skipped_counts %}
+<tr><td>{{ tool }}</td><td>{{ reason }}</td><td>{{ n }}</td></tr>
+{% endfor %}
+</table>
+{% else %}
+<p>Every raw result became a hit.</p>
+{% endif %}
+
+<h2>Notices</h2>
+<ul>
+{% for path in audit.neutralized_files %}
+<li class="info"><strong>INFO</strong> scanner configuration found in repository and neutralized: <code>{{ path }}</code></li>
+{% else %}
+<li>No scanner configuration files were found in the repository.</li>
+{% endfor %}
+</ul>
+</body>
+</html>

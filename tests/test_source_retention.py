@@ -250,3 +250,17 @@ def test_restricting_a_single_file_keeps_it_usable_by_its_owner(tmp_path):
     assert target.read_bytes() == b"data"
     target.write_bytes(b"more")
     target.unlink()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits")
+def test_posix_restrict_to_owner_gives_files_0600_and_directories_0700(tmp_path):
+    """Found by the first run on a real Linux host: files used to get 0700 (an execute bit)."""
+    directory = tmp_path / "d"
+    directory.mkdir()
+    file = directory / "f.db"
+    file.write_bytes(b"x")
+    os.chmod(directory, 0o755)
+    os.chmod(file, 0o644)
+    assert restrict_to_owner(directory) and restrict_to_owner(file)
+    assert stat.S_IMODE(directory.stat().st_mode) == 0o700
+    assert stat.S_IMODE(file.stat().st_mode) == 0o600

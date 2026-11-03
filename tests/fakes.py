@@ -35,9 +35,12 @@ class FakeExecutor:
 
     def paths(self, prepared: Prepared, out_dir: Path) -> ToolPaths:
         return ToolPaths(
-            src="/src", out=out_dir.as_posix(), rules="/rules" if prepared.rules_dir else None,
+            src="/src", out="/out", rules="/rules" if prepared.rules_dir else None,
             sandboxed=True,
         )  # fmt: skip
+        # Same in-container paths as DockerExecutor.paths. The fake used to hand out the HOST out dir
+        # here, which put host paths into the manifest's `command` (an unfaithful double: the real
+        # executor never does, see benchmarks/baseline/manifest.json).
 
     def run(
         self,

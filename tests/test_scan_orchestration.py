@@ -59,7 +59,11 @@ def test_manifest_and_raw_outputs(project, tmp_path, sys_tmp):
     assert manifest["input"]["file_count"] == 2 and len(manifest["input"]["sha256"]) == 64
     assert manifest["workspace_policy_files"] == [SEMGREPIGNORE_NAME]
     blob = json.dumps(manifest)
-    assert str(tmp_path) not in blob and str(sys_tmp) not in blob, "no local paths in the manifest"
+    # Every spelling of a host path: native, POSIX-style, and JSON-escaped (a Windows path in
+    # json.dumps has doubled backslashes, so the plain str() form alone can never match there).
+    for host in (tmp_path, sys_tmp):
+        spellings = {str(host), host.as_posix(), json.dumps(str(host))[1:-1]}
+        assert not [s for s in spellings if s in blob], f"host path {host.name} in the manifest"
     assert "\\\\" not in blob
 
 

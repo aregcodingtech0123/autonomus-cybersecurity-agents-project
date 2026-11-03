@@ -17,8 +17,8 @@
 name: ci
 
 on:
+  # Every branch: push a branch and read CI BEFORE merging it. No branch filter on purpose.
   push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -33,6 +33,19 @@ env:
   UV_VERSION: "0.13.6"
   PYTHON_VERSION: "3.13"
 
+# Runner images are pinned to explicit labels, never `*-latest`.
+#   ubuntu-24.04          Ubuntu 24.04 LTS. `ubuntu-latest` is migrating to Ubuntu 26.04 (rollout from
+#                         2026-10-19, issue actions/runner-images#14748); GitHub's advice is to pin.
+#   windows-2025-vs2026   Windows Server 2025. This is the image `windows-latest` resolved to in the
+#                         first run (run 41680115230 printed "Image: windows-2025-vs2026"), so the pin
+#                         keeps the environment the Windows results were produced on.
+# Why: the POSIX verification table (docs/PHASE1_NOTES.md) records the exact OS of each run, and a label
+# that moves under us makes old evidence and new runs incomparable. Labels come from the "Available
+# Images" table in https://github.com/actions/runner-images (checked 2026-11-03).
+# To move the pin on purpose: change all three labels below together (two in the matrix, one in the
+# docker job), read the new image's release notes, run the branch, then update the OS version and run
+# URL in the table in the same commit. The "Set up job" step of every run prints `Image:` and
+# `Version:`; copy those. tests/test_ci_workflow.py rejects any `-latest` label.
 jobs:
   lint-test:
     name: lint + tests (${{ matrix.os }})
@@ -43,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-2025-vs2026]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,11 +78,11 @@ jobs:
       - name: Ground truth checker
         run: uv run python benchmarks/check_ground_truth.py
       - name: Tests without Docker
-        run: uv run pytest -m "not docker" -q -rs
+        run: uv run pytest -m "not docker" -v -rs
 
   docker:
     name: docker-marked tests (ubuntu, Linux host)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -89,7 +102,7 @@ jobs:
       - name: Fetch Semgrep rules fresh (never cached, never uploaded)
         run: uv run secaudit rules update
       - name: Docker-marked tests
-        run: uv run pytest -m docker -q -rs
+        run: uv run pytest -m docker -v -rs
       - name: Remove the fetched rules (they must not outlive the job)
         if: always()
         run: rm -rf .secaudit/rules

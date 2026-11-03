@@ -39,7 +39,7 @@ Phase 2B (see `PHASE2B_NOTES.md`):
 - [x] SQLite storage (SQLModel + Alembic migrations, per-advisory pip-audit hits, WAL, private file) and hash-verified `secaudit ingest`
 - [x] JSON Schema export (`docs/schema/`) and a self-contained HTML report (autoescape, CSP, no JS)
 - [x] Full CLI: `scan` normalizes/stores/reports, `findings list|show`, `report`, `ingest`, `audit list|delete`; terminal-injection-safe output
-- [x] CI workflow written (`.github/workflows/ci.yml`) - **not yet run on GitHub**
+- [x] CI workflow written (`.github/workflows/ci.yml`); first run 2026-11-03 (run 41680115230) found 3 failures, fixed on `ci/first-run-fixes` and **not yet re-run**; see `PHASE1_NOTES.md`, "First CI run"
 - [x] Planted fakes made generic-shaped before the first push; baseline regenerated (ADR-002: Gitleaks 3 -> 2 results, P03 re-described, metrics unchanged at 9/12 and 4/7)
 - [ ] Bandit and Gitleaks coverage are still `unknown`
 

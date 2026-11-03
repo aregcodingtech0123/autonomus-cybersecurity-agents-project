@@ -16,7 +16,7 @@ The LLM is never the scanning engine.
 - Phase 2A: normalization of raw output into versioned, secret-free findings (dedup, fingerprints, CWE/OWASP
   Top 10:2025, coverage) and a tool-only baseline (`benchmarks/baseline/metrics_tool_only.md`).
 - Phase 2B: SQLite storage with migrations, hash-verified ingest, a self-contained HTML report, the full
-  CLI, hardened masking, and a CI workflow (not yet run on GitHub).
+  CLI, hardened masking, and a CI workflow (first run found 3 failures; the fixes have not run on GitHub yet).
 
 See [docs/SCOPE.md](docs/SCOPE.md), [docs/ROADMAP.md](docs/ROADMAP.md),
 [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md), [docs/DECISIONS.md](docs/DECISIONS.md),

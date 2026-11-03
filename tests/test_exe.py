@@ -236,6 +236,11 @@ def test_planted_docker_and_git_in_cwd_are_never_executed(tmp_path):
     assert out["git_stdout"].startswith("git version"), "the planted git.exe (whoami) must not run"
     assert out["bandit"] == "refused"
     ok, detail = out["docker_available"]
-    assert ok is True and detail[0].isdigit(), (
-        f"the real docker must answer, got {out['docker_available']}"
-    )
+    if ok:
+        assert detail[0].isdigit(), f"the real docker must answer, got {out['docker_available']}"
+    else:
+        # Daemon not running: the failure must still come from the REAL docker CLI. The planted
+        # hostname.exe cannot produce this message (it produced the generic 'docker info failed').
+        assert detail != "docker info failed" and "docker" in detail.lower(), out[
+            "docker_available"
+        ]

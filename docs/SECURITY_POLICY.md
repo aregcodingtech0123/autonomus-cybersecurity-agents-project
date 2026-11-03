@@ -174,3 +174,19 @@ there. (It *is* scanned on purpose by the benchmark, inside the sandbox.)
   1,000,000 bytes (both verified); see each tool's `limitations` in `manifest.json`.
 - **Check-to-open race on intake (review #12).** `lstat` identity is compared with the opened descriptor, but Windows has no
   `O_NOFOLLOW` and still follows parent junctions; a concurrent local attacker is out of scope.
+
+## 7. Secrets policy
+
+- **Real secrets** (API keys, tokens, passwords) reach the program only through environment variables or an untracked
+  `.env` file. `.env` and `.env.*` are git-ignored; the only tracked exception is `.env.example`, which lists variable
+  names with empty values. Never commit a real value, and never paste one into an issue, a log, a test or a document.
+- **Test canaries** are built at runtime, in one place: `tests/canaries.py` assembles every token-shaped test value from
+  harmless fragments when a test calls it, so no realistic token literal sits in the repository or its history. Tests
+  must pass on a fresh clone and in CI with no environment file, so fixtures never come from `.env`.
+  `tests/test_no_secret_literals.py` scans every tracked file and fails on a token-shaped literal.
+- **Benchmark target secrets are intentionally literal**, fake, and part of the frozen baseline: they are the vulnerability
+  the scanners are measured against. They live only under `benchmarks/targets/`, `benchmarks/baseline/` and
+  `tests/fixtures/phase1_baseline/`; `benchmarks/expected_findings.yaml` names the planted lines and its SHA-256 is pinned
+  by the baseline, so it is exempt as well. These paths are the only allowlist of the regression test above.
+- **If a real secret is ever committed**, treat it as compromised: revoke and rotate it first, then remove it from
+  history. Removing it from history does not make it safe again.

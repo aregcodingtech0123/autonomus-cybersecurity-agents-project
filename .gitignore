@@ -15,6 +15,7 @@ htmlcov/
 *.sqlite3
 .env
 .env.*
+!.env.example
 
 # Node / web
 node_modules/

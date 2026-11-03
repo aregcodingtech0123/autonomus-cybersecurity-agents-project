@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from secaudit import __version__
+from secaudit.cliout import safe
 from secaudit.core import evaluation, exe
 from secaudit.core.executors import reap_stale_containers
 from secaudit.core.intake import DEFAULT_LIMITS, CleanupError, IntakeError
@@ -29,6 +30,9 @@ from secaudit.core.rules import DEFAULT_RULESETS, RulesError, update_rules
 from secaudit.core.sandbox import ResourceLimits, docker_available
 from secaudit.core.scan import ScanEnvironmentError, ScanOptions, run_scan
 from secaudit.core.scanners import TOOL_NAMES, SemgrepAdapter, build_adapters
+from secaudit.store.db import DB_FILENAME, open_database, secure_database
+from secaudit.store.ingest import IngestError, ingest_audit_dir
+from secaudit.store.repo import AuditConflictError, Repository
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_INTAKE, EXIT_TOOLS, EXIT_ENV, EXIT_CLEANUP = (
@@ -156,6 +160,15 @@ def build_parser() -> argparse.ArgumentParser:
     norm.add_argument("audit_dir", type=Path, help="directory written by `secaudit scan`")
     norm.add_argument("--out", type=Path, default=None, help="default: <audit_dir>/findings.json")
 
+    ing = sub.add_parser(
+        "ingest",
+        parents=[debug_parent],
+        help="store a normalized audit in SQLite (verifies the raw artifact hashes first)",
+    )
+    ing.add_argument("audit_dir", type=Path, help="directory with manifest.json and findings.json")
+    ing.add_argument("--db", type=Path, default=None, help=f"default: <audit_dir>/../{DB_FILENAME}")
+    ing.add_argument("--replace", action="store_true", help="overwrite an audit stored differently")
+
     ev = sub.add_parser(
         "eval",
         parents=[debug_parent],
@@ -201,6 +214,28 @@ def _cmd_normalize(args: argparse.Namespace) -> int:
         print(f"  {run.tool:10} {run.status:10} {counts}")
     for warning in audit.warnings:
         print(f"  warning: {warning}", file=sys.stderr)
+    return EXIT_OK
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    audit_dir = args.audit_dir
+    db_path = args.db or audit_dir.resolve().parent / DB_FILENAME
+    engine = open_database(db_path, restrict_parent=args.db is None)
+    try:
+        result = ingest_audit_dir(Repository(engine), audit_dir, replace=args.replace)
+    except IngestError as exc:
+        print(f"error: {safe(exc)}", file=sys.stderr)
+        return EXIT_USAGE if exc.kind == "usage" else EXIT_INTAKE
+    except AuditConflictError as exc:
+        print(f"error: {safe(exc)}", file=sys.stderr)
+        return EXIT_INTAKE
+    finally:
+        engine.dispose()
+    secure_database(db_path, restrict_parent=args.db is None)
+    print(
+        f"audit {safe(result.audit_id)}: {result.status} "
+        f"({result.findings} findings, {result.hits} hits) in {db_path.name}"
+    )
     return EXIT_OK
 
 
@@ -378,6 +413,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_audit_delete(args)
         if args.command == "normalize":
             return _cmd_normalize(args)
+        if args.command == "ingest":
+            return _cmd_ingest(args)
         if args.command == "eval":
             return _cmd_eval(args)
     except KeyboardInterrupt:

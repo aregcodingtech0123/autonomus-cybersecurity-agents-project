@@ -240,3 +240,13 @@ def test_restricted_audit_can_still_be_deleted_by_its_owner(project, tmp_path, s
 
 def test_restrict_to_owner_reports_false_instead_of_failing_on_a_missing_path(tmp_path):
     assert restrict_to_owner(tmp_path / "does-not-exist") is False
+
+
+def test_restricting_a_single_file_keeps_it_usable_by_its_owner(tmp_path):
+    """The (OI)(CI) grant used for directories leaves a FILE with an empty ACL on Windows."""
+    target = tmp_path / "secret.db"
+    target.write_bytes(b"data")
+    assert restrict_to_owner(target) is True
+    assert target.read_bytes() == b"data"
+    target.write_bytes(b"more")
+    target.unlink()

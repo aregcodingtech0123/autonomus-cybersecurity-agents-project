@@ -66,8 +66,11 @@ def restrict_to_owner(path: Path) -> bool:
         sid = _current_sid()
         if sid is None:
             return False
+        # (OI)(CI) only makes sense on a directory: on a FILE it yields an ACE that applies to no
+        # object, i.e. an empty ACL and a file nobody can open (found when the SQLite file got it).
+        grant = f"*{sid}:(OI)(CI)F" if path.is_dir() else f"*{sid}:F"
         done = exe.run(
-            ["icacls", str(path), "/inheritance:r", "/grant:r", f"*{sid}:(OI)(CI)F"],
+            ["icacls", str(path), "/inheritance:r", "/grant:r", grant],
             capture_output=True,
             check=False,
         )

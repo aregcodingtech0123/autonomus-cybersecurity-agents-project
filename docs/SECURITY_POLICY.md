@@ -180,13 +180,18 @@ there. (It *is* scanned on purpose by the benchmark, inside the sandbox.)
 - **Real secrets** (API keys, tokens, passwords) reach the program only through environment variables or an untracked
   `.env` file. `.env` and `.env.*` are git-ignored; the only tracked exception is `.env.example`, which lists variable
   names with empty values. Never commit a real value, and never paste one into an issue, a log, a test or a document.
-- **Test canaries** are built at runtime, in one place: `tests/canaries.py` assembles every token-shaped test value from
+- **Test canaries** are built at runtime, in one place: `tests/canaries.py` assembles every provider-shaped test value from
   harmless fragments when a test calls it, so no realistic token literal sits in the repository or its history. Tests
   must pass on a fresh clone and in CI with no environment file, so fixtures never come from `.env`.
-  `tests/test_no_secret_literals.py` scans every tracked file and fails on a token-shaped literal.
-- **Benchmark target secrets are intentionally literal**, fake, and part of the frozen baseline: they are the vulnerability
-  the scanners are measured against. They live only under `benchmarks/targets/`, `benchmarks/baseline/` and
-  `tests/fixtures/phase1_baseline/`; `benchmarks/expected_findings.yaml` names the planted lines and its SHA-256 is pinned
-  by the baseline, so it is exempt as well. These paths are the only allowlist of the regression test above.
+  `tests/test_no_secret_literals.py` scans every tracked file and fails on a provider-shaped literal.
+- **No provider-shaped value anywhere** (ADR-003): no file in the repository or its history holds a value
+  shaped like a provider credential (Stripe, AWS, GitHub, Slack, Google, GitLab, SendGrid, Shopify, npm, PyPI,
+  Hugging Face, DigitalOcean, PEM private keys, JWTs, URLs with credentials), not even a fake one, not even
+  in benchmark data, raw scanner outputs or frozen fixtures. `tests/test_no_secret_literals.py` enforces this
+  over every tracked file with no allowlist.
+- **Benchmark secrets are generic-shaped, intentionally hardcoded, and fake**: they are the vulnerability the
+  scanners are measured against, so they stay literal in `benchmarks/targets/`, in the raw outputs that
+  quote them, and in `benchmarks/expected_findings.yaml`. Their shape (a `bench_` prefix and a random body)
+  matches no provider format, and Gitleaks still detects the positive cases with its generic rule.
 - **If a real secret is ever committed**, treat it as compromised: revoke and rotate it first, then remove it from
   history. Removing it from history does not make it safe again.

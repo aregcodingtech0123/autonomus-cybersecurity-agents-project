@@ -216,3 +216,13 @@ in git history).
   (N02, N04, N05, N06). Details and the full table are in `docs/PHASE1_NOTES.md`.
 - `expected_findings.yaml` now describes this container baseline; `tests/test_docker_integration.py` checks it
   exactly when the local rule snapshot matches `benchmarks/baseline/manifest.json`.
+
+## Addendum 3 (Phase 2A): baseline regenerated
+
+- `raw/` and `manifest.json` were regenerated with a fresh container scan (audit `20261103T081804Z-06b4cbe7`,
+  same rules snapshot) so the manifest carries `neutralized_files` and per-tool `limitations`, and to add
+  `raw/semgrep.json` (coverage data: `paths.scanned`) and case P11 (a generated >1 MB module).
+- Raw Bandit results and pip-audit advisories are unchanged; Bandit's end timestamp and file metrics differ.
+- Figures are now 9 of 12 positives (missed: P08, P10, P11) and 4 of 7 negatives flagged. `metrics_tool_only.{json,md}`
+  hold the normalized, per-case breakdown. The Phase 1 raw files remain in git history and as the test
+  fixture `tests/fixtures/phase1_baseline/`.

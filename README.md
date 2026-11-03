@@ -8,16 +8,20 @@ The LLM is never the scanning engine.
 
 ## Status
 
-**Phase 0 and Phase 1 complete.**
+**Phase 0, Phase 1 and Phase 2A complete.**
 
 - Phase 0: repo skeleton, a deliberately vulnerable benchmark target, a verified ground-truth file.
 - Phase 1: safe intake (directory / ZIP / https Git URL), sandboxed scanner execution in pinned Docker
   images, raw result collection into an audit directory with `manifest.json`.
 
-Not yet: finding normalization, agents, API, MCP server, UI.
+- Phase 2A: normalization of raw output into versioned, secret-free findings (dedup, fingerprints, CWE/OWASP
+  Top 10:2025, coverage) and a tool-only baseline (`benchmarks/baseline/metrics_tool_only.md`).
+
+Not yet: persistence, reports, agents, API, MCP server, UI.
 
 See [docs/SCOPE.md](docs/SCOPE.md), [docs/ROADMAP.md](docs/ROADMAP.md),
-[docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md), [docs/PHASE1_NOTES.md](docs/PHASE1_NOTES.md) and
+[docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md), [docs/PHASE1_NOTES.md](docs/PHASE1_NOTES.md),
+[docs/PHASE2A_NOTES.md](docs/PHASE2A_NOTES.md) and
 [benchmarks/baseline/DISCOVERY.md](benchmarks/baseline/DISCOVERY.md).
 
 ## Development
@@ -32,7 +36,13 @@ uv run secaudit build-images
 uv run secaudit rules update
 
 uv run secaudit scan benchmarks/targets/vuln_python_app --out audits
-# -> audits/<audit_id>/raw/{bandit.sarif,semgrep.sarif,gitleaks.sarif,pip-audit.json} + manifest.json
+# -> audits/<audit_id>/raw/{bandit.sarif,semgrep.sarif,semgrep.json,gitleaks.sarif,pip-audit.json}
+#    + manifest.json + source/ (sanitized copy, owner-only, may contain secrets; --no-keep-source skips it)
+
+uv run secaudit normalize audits/<audit_id>            # -> findings.json (secret-free)
+uv run secaudit audit delete <audit_id> --out audits   # removes raw output and retained source
+uv run secaudit eval --from-raw benchmarks/baseline/raw --source benchmarks/targets/vuln_python_app
+# -> metrics_tool_only.{json,md}; needs no Docker
 ```
 
 Exit codes: `0` scan completed (findings do not change it), `2` usage / refused native run,

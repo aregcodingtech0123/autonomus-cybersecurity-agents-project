@@ -229,6 +229,9 @@ container simulating two users; behaviour on real Linux/macOS hosts is unverifie
   gitlab.com, bitbucket.org, codeberg.org; extend with `--allow-git-host`).
 - **Not done:** image signature/attestation verification, SBOMs, vulnerability scanning of our own images.
 
+> Phase 2A has since implemented most of this list; see `PHASE2A_NOTES.md`. The Phase 1 baseline figures
+> (9/11, 4/7) were superseded by 9/12 and 4/7 when case P11 was added.
+
 ## What Phase 2 needs from these outputs
 
 - `manifest.json` is the index: per-tool status, exact command, pinned vs reported version, ruleset

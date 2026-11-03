@@ -22,15 +22,21 @@ Check an item only when it is done and verified. Work found tempting out of phas
 - [ ] Resolve the Semgrep Rules License question before any hosted/distributed use (see `PHASE1_NOTES.md`)
 
 ## Phase 2 - Normalization
-- [ ] `SecurityFinding` Pydantic model
-- [ ] Deduplication across rules and tools (pip-audit emits duplicates)
-- [ ] CWE / OWASP Top 10 2025 mapping
-- [ ] SQLite persistence (SQLModel/SQLAlchemy)
+Phase 2A (normalization core, see `PHASE2A_NOTES.md`):
+- [x] `SecurityFinding` / `ToolHit` / `Audit` Pydantic models with `schema_version`
+- [x] Deduplication across rules and tools (pip-audit emits duplicates), stable fingerprints
+- [x] CWE / OWASP Top 10:2025 mapping from the official pages (unmapped CWEs counted, e.g. CWE-704)
+- [x] Tool-only baseline metrics: 9/12 positives detected, 4/7 negatives flagged (`benchmarks/baseline/metrics_tool_only.md`)
+- [x] Mask secrets in all derived data (raw outputs stay secret-bearing and byte-identical)
+- [x] Model scanner coverage (Semgrep >1 MB skip is visible via benchmark case P11)
+- [x] Map pip-audit findings to requirement lines via `manifest.json` `pinned_requirements`
+- [x] Retained source snapshot (`<audit>/source/`, owner-only) and `secaudit audit delete`
+
+Phase 2B (not started):
+- [ ] SQLite persistence (SQLModel/SQLAlchemy) keyed by fingerprint
 - [ ] JSON and HTML report
-- [ ] Tool-only baseline metrics (compare against 9/11 positives detected, 4/7 negatives falsely flagged)
-- [ ] Mask secrets in all derived data (raw Bandit/Semgrep outputs are secret-bearing; masking is Phase 2 work)
-- [ ] Model scanner coverage (files actually analyzed/skipped; Semgrep ignores files over 1 MB silently)
-- [ ] Map pip-audit findings to requirement lines via `manifest.json` `pinned_requirements`
+- [ ] Manual labeling of the 3 unlabeled baseline findings; CWE/CVSS enrichment for pip-audit advisories
+- [ ] Bandit and Gitleaks coverage are still `unknown`
 
 ## Phase 3 - Triage agent
 - [ ] CrewAI Flow with evidence-required structured output

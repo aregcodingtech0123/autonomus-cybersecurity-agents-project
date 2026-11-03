@@ -49,12 +49,20 @@ def _current_sid() -> str | None:
     return sid if re.fullmatch(r"S-\d+(-\d+)+", sid) else None
 
 
-def restrict_to_owner(path: Path) -> bool:
+def restrict_to_owner(path: Path, *, reset_children: bool = False) -> bool:
     """Owner-only access to `path`; True if applied, False if not (never raises).
 
-    Windows: the grant is set on the directory only. Do NOT add /T: applying an (OI)(CI) grant to
-    files with /T leaves them with an EMPTY ACL (verified: even the owner could not read them).
-    NTFS propagates the inheritable ACE to existing and future children.
+    Windows: the grant is set on the directory only. Do NOT add /T to the GRANT: applying an
+    (OI)(CI) grant to files with /T leaves them with an EMPTY ACL (verified: even the owner could
+    not read them). NTFS propagates the inheritable ACE to existing and future children.
+
+    `/inheritance:r` removes only INHERITED entries. An object created where its parent has no
+    inheritable ACE gets the creating process's default DACL as explicit entries (SYSTEM,
+    Administrators, ...), as on the GitHub Windows runner's elevated account, and those would
+    survive. So the path is first `/reset` to a clean ACL (explicit entries dropped), then locked.
+    With `reset_children=True` (a directory that already holds files) every existing child is also
+    reset, so it falls back to inheriting exactly the owner's entry; `/reset` is not a grant, so it
+    does not cause the empty-ACL problem above.
     """
     path = Path(path)
     if not path.exists():
@@ -70,12 +78,25 @@ def restrict_to_owner(path: Path) -> bool:
         # (OI)(CI) only makes sense on a directory: on a FILE it yields an ACE that applies to no
         # object, i.e. an empty ACL and a file nobody can open (found when the SQLite file got it).
         grant = f"*{sid}:(OI)(CI)F" if path.is_dir() else f"*{sid}:F"
+        reset = exe.run(["icacls", str(path), "/reset"], capture_output=True, check=False)
+        if reset.returncode != 0:
+            return False
         done = exe.run(
             ["icacls", str(path), "/inheritance:r", "/grant:r", grant],
             capture_output=True,
             check=False,
         )
-        return done.returncode == 0
+        if done.returncode != 0:
+            return False
+        if reset_children and path.is_dir() and any(path.iterdir()):
+            # path/* with /T: every existing child (recursively) back to "inherit from parent".
+            children = exe.run(
+                ["icacls", str(path / "*"), "/reset", "/T", "/C"],
+                capture_output=True,
+                check=False,
+            )
+            return children.returncode == 0
+        return True
     except OSError:
         return False
 

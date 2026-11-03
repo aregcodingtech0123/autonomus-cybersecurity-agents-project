@@ -75,7 +75,7 @@ findings; 46 raw -> 25 findings in total.
 - **Windows ACL on `source/`.** Access is restricted to the current user by SID on the directory (verified via
   `icacls /save` SDDL). Administrators and SYSTEM can still read it as in any Windows ACL model; this is a
   confidentiality-at-rest nicety, not a security boundary. See `SECURITY_POLICY.md`.
-- **The committed baseline manifest says `source.retained: true`** although no source directory is committed;
+- **(Resolved in Phase 2B: the flag was split into `retained_at_scan` / `committed` / `available`.)** The committed baseline manifest said `source.retained: true` although no source directory is committed;
   the source is regenerated from `benchmarks/targets/`.
 - **Deviations:** packaged data lives in `src/secaudit/data/` rather than a repo-level `data/` so it ships in the
   wheel; `pydantic` and `pyyaml` are now runtime dependencies; Phase 1 code was touched only for source retention

@@ -5,7 +5,7 @@ locations, hashes of raw artifacts. Raw scanner output is never stored. Column t
 scanned content ([UNTRUSTED] in core/models.py) is plain data: nothing here builds SQL from it.
 
 Every change to a table needs an Alembic revision (store/migrations/versions) and passes the drift
-test in tests/test_store_migrations.py, which compares the migrated schema with this metadata.
+test in tests/test_store.py, which compares the migrated schema with this metadata.
 """
 
 from sqlalchemy import JSON, Column, ForeignKeyConstraint, Index, UniqueConstraint

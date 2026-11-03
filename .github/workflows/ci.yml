@@ -1,0 +1,84 @@
+# CI for secaudit.
+#
+# NOT RUN LOCALLY: GitHub Actions cannot be executed on a developer machine. This file was only
+# parsed as YAML and checked structurally (tests/test_ci_workflow.py); actionlint was not available.
+# The first run on GitHub is also the first real run of the POSIX-specific tests on a Linux host
+# (Phase 1 only simulated Linux in a container). Read its results before trusting any of it.
+#
+# Semgrep registry rules are under the Semgrep Rules License v1.0 (docs/DECISIONS.md, ADR-001): the
+# docker job fetches them fresh inside the job with `secaudit rules update` and nothing here uploads
+# or caches them. The strict parity test skips, with a stated reason, if the fetched snapshot
+# differs from the one recorded in benchmarks/baseline/manifest.json.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.13.6"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  lint-test:
+    name: lint + tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: false
+      - name: Install (locked)
+        run: uv sync --locked
+      - name: Ruff check
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: Ground truth checker
+        run: uv run python benchmarks/check_ground_truth.py
+      - name: Tests without Docker
+        run: uv run pytest -m "not docker" -q -rs
+
+  docker:
+    name: docker-marked tests (ubuntu, Linux host)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: false
+      - name: Install (locked)
+        run: uv sync --locked
+      - name: Build the pinned scanner images
+        run: uv run secaudit build-images
+      - name: Fetch Semgrep rules fresh (never cached, never uploaded)
+        run: uv run secaudit rules update
+      - name: Docker-marked tests
+        run: uv run pytest -m docker -q -rs
+      - name: Remove the fetched rules (they must not outlive the job)
+        if: always()
+        run: rm -rf .secaudit/rules

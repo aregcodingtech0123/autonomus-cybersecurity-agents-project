@@ -21,7 +21,7 @@ Check an item only when it is done and verified. Work found tempting out of phas
 - [ ] Image signature/attestation verification, SBOMs, scan our own images
 - [ ] Resolve the Semgrep Rules License question before any hosted/distributed use (see `PHASE1_NOTES.md`)
 
-## Phase 2 - Normalization
+## Phase 2 - Normalization (complete: 2A and 2B)
 Phase 2A (normalization core, see `PHASE2A_NOTES.md`):
 - [x] `SecurityFinding` / `ToolHit` / `Audit` Pydantic models with `schema_version`
 - [x] Deduplication across rules and tools (pip-audit emits duplicates), stable fingerprints
@@ -32,10 +32,14 @@ Phase 2A (normalization core, see `PHASE2A_NOTES.md`):
 - [x] Map pip-audit findings to requirement lines via `manifest.json` `pinned_requirements`
 - [x] Retained source snapshot (`<audit>/source/`, owner-only) and `secaudit audit delete`
 
-Phase 2B (not started):
-- [ ] SQLite persistence (SQLModel/SQLAlchemy) keyed by fingerprint
-- [ ] JSON and HTML report
-- [ ] Manual labeling of the 3 unlabeled baseline findings; CWE/CVSS enrichment for pip-audit advisories
+Phase 2B (see `PHASE2B_NOTES.md`):
+- [x] The 3 unlabeled baseline findings labeled (P01 match for the CWE-704 tag; new kind `related_informational`: R01, R02)
+- [x] Manifest `source` flags split into `retained_at_scan` / `committed` (+ computed `available`); schema version 2
+- [x] Masking hardened to fail closed (url credentials, Bearer/Basic, `sk-` keys, entropy fallback, PEM blocks across lines)
+- [x] SQLite storage (SQLModel + Alembic migrations, per-advisory pip-audit hits, WAL, private file) and hash-verified `secaudit ingest`
+- [x] JSON Schema export (`docs/schema/`) and a self-contained HTML report (autoescape, CSP, no JS)
+- [x] Full CLI: `scan` normalizes/stores/reports, `findings list|show`, `report`, `ingest`, `audit list|delete`; terminal-injection-safe output
+- [x] CI workflow written (`.github/workflows/ci.yml`) - **not yet run on GitHub**
 - [ ] Bandit and Gitleaks coverage are still `unknown`
 
 ## Phase 3 - Triage agent
@@ -83,3 +87,14 @@ Phase 2B (not started):
       Motivated by benchmark cases P08 and P10, which every tool misses. Our own rules would also avoid the
       registry license limits.
 - [ ] Larger/second benchmark target so detection metrics are not measured on one tiny app.
+- [ ] **Phase 2C: benchmark expansion to 30-40 cases, BEFORE Phase 3.** One 12-positive / 7-negative app is too small
+      to tell a triage agent's effect from noise; more cases, more shapes of each vulnerability, more negatives.
+- [ ] **Custom Semgrep rules for P08, P10 and P11** (the cases no registry rule detects), owned by the project;
+      this is also the path out of the Semgrep Rules License boundary (`DECISIONS.md`, ADR-001).
+- [ ] **Review the first Linux CI results.** Phase 1 only simulated Linux in a container; the CI run is the first
+      real one. Do not treat any POSIX claim as verified until that run has been read.
+- [ ] **Egress allow-list proxy** (Phase 8, with private/link-local blocking) to close the pip-audit egress residual risk.
+- [ ] **CWE/CVSS enrichment for pip-audit advisories via OSV** (Phase 4). pip-audit emits no CWE, so its findings are
+      OWASP-unmapped today; every advisory is already its own stored hit, which is what per-advisory scoring needs.
+- [ ] **LLM egress guard** (Phase 3): a last-mile secret filter on everything that leaves for a model, independent
+      of the masking done during normalization.

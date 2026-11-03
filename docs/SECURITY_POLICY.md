@@ -103,7 +103,22 @@ Every rejection raises `IntakeError` with a stable reason code. Defaults (all co
   too (Bandit's B105 message embeds the literal). Snippets come from the retained source, never from SARIF.
   Tests grep every derived output for the planted fake secrets; raw files are exempt.
   Only `manifest.json` and CLI summaries are guaranteed secret-free (no host paths, no secret values).
-  Masking of any *derived* data (findings, evidence snippets, anything shown to an LLM) happens in Phase 2.
+- **Database, report and CLI are derived data too (Phase 2B).** `findings.json`, the SQLite database
+  (`<out>/secaudit.db`, WAL included), `report.html` and everything the CLI prints are built only from
+  `findings.json` / `manifest.json`; raw scanner files are opened for one purpose, verifying their SHA-256
+  (`secaudit ingest` refuses, exit 3, when a raw artifact no longer matches the manifest or a finding's `raw_ref`).
+  Masking fails closed (URL credentials, Authorization/Bearer/Basic values, `sk-`/GitHub/Slack/Google/AWS/JWT
+  shapes, a high-entropy token fallback, typed assignments, and whole private-key blocks found from the full
+  retained file). A test greps all of these outputs for the benchmark's planted fakes and for runtime-built
+  canaries of every shape; raw files are exempt.
+- **The database file is owner-only where the OS allows it:** POSIX 0600 (created that way before SQLite
+  touches it, so the -wal/-shm files inherit it); Windows icacls by SID on the file and, for the default
+  location, its directory. Administrators and SYSTEM can still take ownership. On Windows a grant with
+  `(OI)(CI)` on a file leaves an empty ACL; `restrict_to_owner` uses the plain grant for files.
+- **Terminal output is escaped.** Every scanned value the CLI prints (paths, titles, rule text, input names)
+  passes `cliout.safe`, which removes ANSI/OSC sequences, control, bidi and zero-width characters. The HTML
+  report additionally strips them before HTML-escaping, has no script, no external resource and a CSP pinned to
+  its one stylesheet.
 - The temporary workspace is deleted after every run, including failures and timeouts.
 - `--runner native` has no isolation: it refuses to run without `--i-trust-this-code` and prints a warning.
 - Fetched Semgrep rules are never committed to the repository (license; see `docs/PHASE1_NOTES.md`).

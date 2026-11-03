@@ -226,3 +226,12 @@ in git history).
 - Figures are now 9 of 12 positives (missed: P08, P10, P11) and 4 of 7 negatives flagged. `metrics_tool_only.{json,md}`
   hold the normalized, per-case breakdown. The Phase 1 raw files remain in git history and as the test
   fixture `tests/fixtures/phase1_baseline/`.
+
+## Addendum 4 (Phase 2B): manifest and labels
+
+- `manifest.json` was edited by hand once: `source.retained` (true) became `source.retained_at_scan: true` plus
+  `source.committed: false`, because no source directory is committed next to the raw files. Nothing else in the
+  manifest, and no raw file, changed; the manifest is not hash-pinned (the raw artifacts are, through it).
+- The three findings that were unlabeled in Addendum 3 are now labeled in `benchmarks/expected_findings.yaml`
+  (P01 accepts Semgrep's CWE-704 tag on line 21; `import pickle` / `import subprocess` are the
+  `related_informational` items R01 / R02). Detection numbers did not change: 9 of 12 positives, 4 of 7 negatives.

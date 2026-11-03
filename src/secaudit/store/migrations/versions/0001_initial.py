@@ -1,7 +1,7 @@
 """initial schema: schema_version, audit, tool_run, raw_artifact, finding, finding_hit
 
 Hand-written and FROZEN: never edit a released revision, add a new one. The drift test in
-tests/test_store_migrations.py fails if the ORM tables and the migrated schema disagree.
+tests/test_store.py fails if the ORM tables and the migrated schema disagree.
 
 Revision ID: 0001
 Revises: (none)

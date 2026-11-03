@@ -1,7 +1,7 @@
 """Regression guard: no provider-shaped credential in any tracked file. NO allowlist.
 
 GitHub push protection scans every commit of a push and blocks provider-shaped tokens even when they
-are fake. Since ADR-003 (docs/DECISIONS.md) nothing in the repository is provider-shaped: not the
+are fake. Since ADR-002 (docs/DECISIONS.md) nothing in the repository is provider-shaped: not the
 tests, not the benchmark target, not the raw scanner outputs, not the frozen fixtures.
 
 * Test canaries that must look like real provider tokens (to prove masking catches them) are
@@ -111,7 +111,7 @@ def test_no_tracked_file_holds_a_provider_shaped_literal():
             problems.append(f"{rel}:{line}  {kind}  (length {length})")
     assert not problems, (
         "provider-shaped literal(s) in tracked files. Build test canaries at runtime from "
-        "fragments (tests/canaries.py); benchmark secrets must be generic-shaped (ADR-003):\n  "
+        "fragments (tests/canaries.py); benchmark secrets must be generic-shaped (ADR-002):\n  "
         + "\n  ".join(problems)
     )
 
@@ -171,7 +171,7 @@ def test_negative_control_benign_text_is_not_flagged():
 
 
 def test_planted_benchmark_secrets_are_generic_shaped():
-    """ADR-003: hardcoded on purpose, fake, and matching no provider format."""
+    """ADR-002: hardcoded on purpose, fake, and matching no provider format."""
     for value in planted_secrets():
         assert scan_text(f'value = "{value}"') == [], "a planted fake looks like a provider token"
     for value in (planted_api_key(), ini_key_id(), ini_secret()):

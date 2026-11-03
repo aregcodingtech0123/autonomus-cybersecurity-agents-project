@@ -1,4 +1,4 @@
-"""Re-scrub the FROZEN records with an exact-length value mapping; recompute their hashes (ADR-003).
+"""Re-scrub the FROZEN records with an exact-length value mapping; recompute their hashes (ADR-002).
 
     uv run python benchmarks/rescrub_frozen.py --mapping PATH [--phase1-commit SHA]
 

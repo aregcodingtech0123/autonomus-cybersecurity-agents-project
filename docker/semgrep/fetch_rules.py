@@ -10,6 +10,8 @@ import hashlib
 import json
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -17,6 +19,18 @@ BASE_URL = "https://semgrep.dev/c/"
 OUT_DIR = Path("/out")
 MAX_BYTES = 20 * 1024 * 1024
 RULESET_RE = re.compile(r"^p/[a-z0-9][a-z0-9_-]*$")
+ATTEMPTS = (
+    3  # the registry once answered with something that was not a rules file; the re-run passed
+)
+BACKOFF_S = (2, 5)  # pause before attempt 2 and 3
+
+
+def describe(status: object, content_type: object, body: bytes) -> str:
+    """What the server returned, safe to print: printable ASCII only, first 80 bytes."""
+    sample = "".join(chr(b) if 32 <= b < 127 else "." for b in body[:80])
+    return (
+        f"HTTP {status}, content-type {content_type!r}, {len(body)} bytes, starts with {sample!r}"
+    )
 
 
 def fetch(ruleset: str) -> dict:
@@ -27,12 +41,31 @@ def fetch(ruleset: str) -> dict:
     request = urllib.request.Request(  # noqa: S310
         url, headers={"User-Agent": "secaudit-rules-update"}
     )
-    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
-        body = response.read(MAX_BYTES + 1)
-    if len(body) > MAX_BYTES:
-        raise SystemExit(f"{ruleset}: response larger than {MAX_BYTES} bytes")
-    if not body.lstrip().startswith(b"rules:"):
-        raise SystemExit(f"{ruleset}: response does not look like a Semgrep rules file")
+    problem = "no response"
+    for attempt in range(1, ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
+                status, content_type = response.status, response.headers.get("content-type")
+                body = response.read(MAX_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            problem = f"HTTP {exc.code}"
+            if exc.code < 500 and exc.code != 429:  # a client error will not fix itself
+                raise SystemExit(f"{ruleset}: {problem}") from None
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            problem = f"network error ({type(exc).__name__})"
+        else:
+            if len(body) > MAX_BYTES:
+                raise SystemExit(f"{ruleset}: response larger than {MAX_BYTES} bytes")
+            if body.lstrip().startswith(b"rules:"):
+                break
+            problem = "response does not look like a Semgrep rules file: " + describe(
+                status, content_type, body
+            )
+        if attempt < ATTEMPTS:
+            print(f"{ruleset}: attempt {attempt} failed ({problem}); retrying", file=sys.stderr)
+            time.sleep(BACKOFF_S[attempt - 1])
+    else:
+        raise SystemExit(f"{ruleset}: {problem} (after {ATTEMPTS} attempts)")
     filename = ruleset.replace("/", "-") + ".yaml"
     (OUT_DIR / filename).write_bytes(body)
     return {

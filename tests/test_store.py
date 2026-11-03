@@ -16,8 +16,8 @@ from alembic.runtime.migration import MigrationContext
 from sqlalchemy import inspect, text
 from sqlmodel import SQLModel
 
+from acl_helpers import current_principal, principals, sddl_dacl
 from secaudit import cli
-from secaudit.core import exe
 from secaudit.core.models import SCHEMA_VERSION, Audit
 from secaudit.core.normalize.pipeline import normalize_audit_dir
 from secaudit.store.convert import IngestRecord
@@ -357,26 +357,15 @@ def test_posix_database_files_are_owner_only(tmp_path):
     engine.dispose()
 
 
-def _sddl(path: Path, scratch: Path) -> str:
-    target = scratch / "acl.txt"
-    exe.run(["icacls", str(path), "/save", str(target)], capture_output=True, check=True)
-    return target.read_bytes().decode("utf-16")
-
-
 @pytest.mark.skipif(os.name != "nt", reason="icacls/SDDL is Windows-only")
 def test_windows_database_file_is_restricted_to_the_current_user_and_still_usable(tmp_path):
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     db_path = tmp_path / "w.db"
     engine = open_database(db_path)
-    sddl = _sddl(db_path, scratch)
-    dacl = re.search(r"D:([A-Z]*)((?:\([^)]*\))*)", sddl)
-    assert dacl and "P" in dacl.group(1), sddl
-    sids = {ace.split(";")[-1] for ace in re.findall(r"\(([^)]*)\)", dacl.group(2))}
-    done = exe.run(
-        ["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, check=True
-    )
-    assert sids == {done.stdout.strip().split(",")[1].strip().strip('"')}, sids
+    flags, _aces = sddl_dacl(db_path, scratch)
+    assert "P" in flags, "inheritance must be removed (protected DACL)"
+    assert principals(db_path, scratch) == {current_principal()}
     engine.dispose()
     reopened = open_database(db_path)  # an empty ACL would make this fail (the bug this test pins)
     assert tables(reopened) == TABLES

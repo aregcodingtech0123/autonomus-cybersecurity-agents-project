@@ -72,7 +72,7 @@ cases:
     notes: >
       Two secrets, split detection. Gitleaks (generic-api-key) flags only line 3 (API key).
       Bandit B105 flags only line 4 (ADMIN_PASSWORD variable name). No tool flags both lines.
-      ADR-003 (re-scrub): the API key is generic-shaped (`bench_` prefix), no longer Stripe-shaped,
+      ADR-002 (re-scrub): the API key is generic-shaped (`bench_` prefix), no longer Stripe-shaped,
       so Gitleaks reports it with generic-api-key instead of stripe-access-token. Same line.
 
   - id: P03
@@ -89,7 +89,7 @@ cases:
       Gitleaks allowlists, so the case was flawed (the old "miss" was not a tool miss). It now
       uses a random synthetic key that matches the AWS pattern but is not a documented example
       and is not valid. The documented example key moved to negative case N07.
-      RE-DESCRIBED by ADR-003 (re-scrub): both values are now generic-shaped (`bench_` prefix) so no
+      RE-DESCRIBED by ADR-002 (re-scrub): both values are now generic-shaped (`bench_` prefix) so no
       provider-shaped credential exists anywhere in the repository; the case is no longer
       AWS-specific. Gitleaks 8.30.1 reports generic-api-key on line 8 only: its generic rule
       allowlists identifiers matching `key_id`, so line 7 (`aws_access_key_id`) is not reported
@@ -337,7 +337,7 @@ cases:
     observed_false_alarms: []
     notes: >
       Added in Phase 1 (Task 0): the original P03 value, kept as a negative. Gitleaks 8.30.1
-      does not report it, which is the desired behavior. ADR-003 (re-scrub): no longer AWS's
+      does not report it, which is the desired behavior. ADR-002 (re-scrub): no longer AWS's
       documented example; generic-shaped values that end in EXAMPLE / EXAMPLEKEY like the original,
       which Gitleaks' stopword list skips. Still not reported.
 

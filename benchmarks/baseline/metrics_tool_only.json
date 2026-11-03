@@ -113,7 +113,7 @@
   "inputs": {
     "audit_id": "20261103T161647Z-68eba1f9",
     "excluded_cases": [],
-    "ground_truth_sha256": "7299becf912296a08f00c82dfa98d04b8a17fedf12dc918fb6bf5bece6d85e5a",
+    "ground_truth_sha256": "c8462e97b23d7933bd8e3d0b74dcfe482ab436265fdba7759384d793a4bd5d89",
     "semgrep_rules": {
       "fetch_id": "20261102T205851Z",
       "rulesets": [

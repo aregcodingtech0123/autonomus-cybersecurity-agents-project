@@ -39,6 +39,8 @@ def test_workflow_parses_and_has_the_two_jobs(doc):
     triggers = doc.get("on", doc.get(True))  # PyYAML reads the bare key `on` as True
     assert set(triggers) == {"push", "pull_request", "workflow_dispatch"}
     assert "pull_request_target" not in triggers, "never run fork code with write tokens"
+    # Every branch, so a branch can be pushed and seen green BEFORE it is merged.
+    assert not (triggers["push"] or {}), "push must have no branches/tags/paths filter"
 
 
 def test_least_privilege_and_no_secrets(doc):
@@ -56,7 +58,7 @@ def test_least_privilege_and_no_secrets(doc):
 
 def test_lint_and_test_job_covers_ubuntu_and_windows_without_docker(doc):
     job = doc["jobs"]["lint-test"]
-    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "windows-latest"}
+    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-24.04", "windows-2025-vs2026"}
     lines = " | ".join(run_lines(job))
     for needed in (
         "uv sync --locked",
@@ -70,7 +72,7 @@ def test_lint_and_test_job_covers_ubuntu_and_windows_without_docker(doc):
 
 def test_docker_job_builds_images_fetches_rules_fresh_then_runs_the_docker_tests(doc):
     job = doc["jobs"]["docker"]
-    assert job["runs-on"] == "ubuntu-latest"
+    assert job["runs-on"] == "ubuntu-24.04"
     commands = run_lines(job)
     order = {
         key: next(i for i, c in enumerate(commands) if key in c)
@@ -81,6 +83,17 @@ def test_docker_job_builds_images_fetches_rules_fresh_then_runs_the_docker_tests
     assert any("rm -rf .secaudit/rules" in c for c in commands)
     cleanup = next(s for s in steps(job) if "rm -rf .secaudit/rules" in s.get("run", ""))
     assert cleanup["if"] == "always()"
+
+
+def test_runner_images_are_pinned_to_explicit_versions(doc):
+    """`-latest` moves under us (ubuntu-latest -> Ubuntu 26.04 from 2026-10-19), and the POSIX
+    verification table records the exact OS a run used. Move the pin deliberately (see ci.yml)."""
+    labels = set(doc["jobs"]["lint-test"]["strategy"]["matrix"]["os"])
+    labels.add(doc["jobs"]["docker"]["runs-on"])
+    assert labels
+    for label in labels:
+        assert re.fullmatch(r"ubuntu-\d{2}\.\d{2}|windows-\d{4}(-vs\d{4})?", label), label
+        assert not label.endswith("-latest"), label
 
 
 def test_nothing_caches_or_uploads_anything(doc):

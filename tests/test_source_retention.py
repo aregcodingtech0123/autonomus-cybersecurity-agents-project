@@ -11,9 +11,14 @@ from pathlib import Path
 
 import pytest
 
+from acl_helpers import (
+    current_principal,
+    principals,
+    sddl_dacl,
+    without_inheritable_aces,
+)
 from fakes import FakeExecutor, fake_rules
 from secaudit import cli
-from secaudit.core import exe
 from secaudit.core.retention import (
     AuditNotFoundError,
     delete_audit,
@@ -194,19 +199,6 @@ def test_cli_scan_prints_one_notice_about_the_retained_source(
 # ---------------------------------------------------------------- Windows ACL (real icacls, locale independent)
 
 
-def _sddl(path: Path, scratch: Path) -> str:
-    target = scratch / "acl.txt"
-    exe.run(["icacls", str(path), "/save", str(target)], capture_output=True, check=True)
-    return target.read_bytes().decode("utf-16")
-
-
-def _current_sid() -> str:
-    done = exe.run(
-        ["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, check=True
-    )
-    return done.stdout.strip().split(",")[1].strip().strip('"')
-
-
 @pytest.mark.skipif(
     os.name != "nt",
     reason="icacls/SDDL is Windows-only; POSIX uses 0700/0600 (see test_raw_output_secrecy)",
@@ -214,21 +206,57 @@ def _current_sid() -> str:
 def test_windows_audit_directory_is_restricted_to_the_current_user(project, tmp_path, sys_tmp):
     outcome = scan(project, tmp_path)
     assert outcome.manifest["source"]["restricted_to_owner"] is True
-    sddl = _sddl(outcome.audit_dir, tmp_path)
-    dacl = re.search(r"D:([A-Z]*)((?:\([^)]*\))*)", sddl)
-    assert dacl, sddl
-    flags, aces = dacl.group(1), re.findall(r"\(([^)]*)\)", dacl.group(2))
+    flags, _aces = sddl_dacl(outcome.audit_dir, tmp_path)
     assert "P" in flags, "inheritance must be removed (protected DACL)"
-    sids = {ace.split(";")[-1] for ace in aces}
-    assert sids == {_current_sid()}, f"only the current user may have access, got {sids}"
-    # A child file must inherit exactly the owner's ACE. (Applying the grant with /T instead leaves
-    # files with an EMPTY ACL: the owner could not even read them. That was the first attempt.)
-    child = _sddl(outcome.audit_dir / "source" / "app.py", tmp_path)
-    child_aces = re.findall(r"\(([^)]*)\)", re.search(r"D:[A-Z]*((?:\([^)]*\))*)", child).group(1))
-    assert {a.split(";")[-1] for a in child_aces} == {_current_sid()}, child
-    assert (outcome.audit_dir / "source" / "app.py").read_bytes() == b"print('x')\n", (
-        "owner can still read"
+    assert principals(outcome.audit_dir, tmp_path) == {current_principal()}, (
+        "only the current user may have access"
     )
+    # A child file must carry exactly the owner's ACE. (Applying the grant with /T instead leaves
+    # files with an EMPTY ACL: the owner could not even read them. That was the first attempt.)
+    child = outcome.audit_dir / "source" / "app.py"
+    assert principals(child, tmp_path) == {current_principal()}, sddl_dacl(child, tmp_path)
+    assert child.read_bytes() == b"print('x')\n", "owner can still read"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="icacls/SDDL is Windows-only")
+def test_windows_restriction_drops_explicit_aces_from_the_process_default_dacl(tmp_path):
+    """First CI run (Windows, account runneradmin): objects created where the parent has no
+    inheritable ACE carry EXPLICIT SYSTEM/Administrators ACEs, which `/inheritance:r` keeps."""
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    without_inheritable_aces(parent)
+    audit = parent / "audit"
+    (audit / "source" / "pkg").mkdir(parents=True)
+    leaf = audit / "source" / "pkg" / "mod.py"
+    leaf.write_bytes(b"x = 1\n")
+    (audit / "manifest.json").write_bytes(b"{}")
+    me = current_principal()
+    assert principals(leaf, scratch) - {me}, (
+        "setup must reproduce the extra ACEs, or this proves nothing"
+    )
+
+    assert restrict_to_owner(audit, reset_children=True) is True
+
+    for path in (audit, audit / "source", audit / "source" / "pkg", leaf, audit / "manifest.json"):
+        assert principals(path, scratch) == {me}, (path.name, sddl_dacl(path, scratch))
+    assert leaf.read_bytes() == b"x = 1\n", "owner can still read"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="icacls/SDDL is Windows-only")
+def test_windows_restriction_of_a_single_file_drops_explicit_aces_too(tmp_path):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    without_inheritable_aces(parent)
+    db = parent / "w.db"
+    db.write_bytes(b"data")
+    assert principals(db, scratch) - {current_principal()}, "setup must reproduce the extra ACEs"
+    assert restrict_to_owner(db) is True
+    assert principals(db, scratch) == {current_principal()}
+    assert db.read_bytes() == b"data"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="icacls is Windows-only")

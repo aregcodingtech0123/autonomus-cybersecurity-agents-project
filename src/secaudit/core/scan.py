@@ -198,7 +198,8 @@ def _retain_source(workspace: Path, audit_dir: Path) -> dict:
     """
     destination = audit_dir / "source"
     shutil.copytree(workspace, destination, copy_function=shutil.copyfile, symlinks=False)
-    restricted = restrict_to_owner(audit_dir)  # before read-only: children are re-evaluated by NTFS
+    # Before read-only. reset_children: the copied files exist and may carry explicit entries.
+    restricted = restrict_to_owner(audit_dir, reset_children=True)
     make_tree_readonly(destination)
     return {
         "retained_at_scan": True,

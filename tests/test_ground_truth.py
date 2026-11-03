@@ -45,3 +45,20 @@ def test_checker_rejects_missing_cases(checker, tmp_path):
         encoding="utf-8",
     )
     assert any("missing planned cases" in p for p in checker.check(bad))
+
+
+def test_checker_rejects_a_related_item_pointing_nowhere(checker, tmp_path):
+    doc = checker.DEFAULT_GROUND_TRUTH.read_text(encoding="utf-8")
+    broken = doc.replace("related_to: P06", "related_to: P99")
+    assert broken != doc
+    bad = tmp_path / "expected_findings.yaml"
+    bad.write_text(broken, encoding="utf-8")
+    assert any("R01" in p and "related_to" in p for p in checker.check(bad))
+
+
+def test_checker_keeps_related_items_out_of_the_detection_lists(checker, tmp_path):
+    doc = checker.DEFAULT_GROUND_TRUTH.read_text(encoding="utf-8")
+    broken = doc.replace("observed_by_tools: [bandit]", "expected_detecting_tools: [bandit]", 1)
+    bad = tmp_path / "expected_findings.yaml"
+    bad.write_text(broken, encoding="utf-8")
+    assert any("not detections" in p for p in checker.check(bad))

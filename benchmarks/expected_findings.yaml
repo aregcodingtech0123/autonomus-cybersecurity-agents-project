@@ -5,7 +5,7 @@
 # contain the `anchor` substring, so any edit that shifts a case breaks the test.
 #
 # Fields
-#   kind                    positive | negative | injection_bait
+#   kind                    positive | negative | injection_bait | related_informational
 #   expected_detecting_tools  positives only: tools that OBSERVABLY detected the case in the
 #                           canonical baseline: the Phase 1 container run recorded in
 #                           benchmarks/baseline/raw/ + manifest.json (Semgrep rulesets p/python +
@@ -20,6 +20,12 @@
 #   generated               the case file is produced by a committed generator (P11): generator, path,
 #                           sha256, min_bytes. The checker and `secaudit eval` regenerate it when missing.
 #   expected_detecting_tools for negatives and bait is always empty: nobody SHOULD report them.
+#   related_informational   (Phase 2B) low-value noise that exists only because of another case, e.g. the
+#                           `import pickle` line next to a pickle.loads positive. `related_to` names that case.
+#                           Such findings are labeled (so they are not "unlabeled") but they are NOT detections
+#                           and NOT false positives and never change the positive/negative counts. The tools that
+#                           reported them in the baseline are in `observed_by_tools`. Matching: any finding that
+#                           overlaps the range and whose class is accepted (`cwe`/`match`).
 #
 # Paths are relative to benchmarks/targets/vuln_python_app/.
 
@@ -37,9 +43,22 @@ cases:
     anchor: "f\"SELECT id, username, email FROM users WHERE username = '{username}'\""
     cwe: CWE-89
     expected_detecting_tools: [bandit, semgrep]
+    match:
+      - file: webshop/db.py
+        line_start: 21
+        line_end: 22
+        cwe: [CWE-89]
+      # Phase 2B: Semgrep's tainted-sql-string rule reports this exact line but tags it CWE-704 (its own
+      # metadata; the finding is the SQL injection). Accepted for line 21 only, so the finding is labeled.
+      - file: webshop/db.py
+        line_start: 21
+        line_end: 21
+        cwe: [CWE-704]
     notes: >
       Bandit B608 (confidence LOW). Semgrep reports two rules: tainted-sql-string (line 21) and
-      the Django-named sql-injection-db-cursor-execute (range 19-22).
+      the Django-named sql-injection-db-cursor-execute (range 19-22). tainted-sql-string carries a
+      CWE-704 tag instead of CWE-89; Phase 2B accepts that class on line 21 (labeling only: P01 was
+      already detected by bandit and semgrep through B608 / sql-injection-db-cursor-execute).
 
   - id: P02
     title: Hardcoded fake API key and admin password in source
@@ -313,6 +332,36 @@ cases:
     notes: >
       Added in Phase 1 (Task 0): the original P03 value, kept as a negative. Gitleaks 8.30.1
       does not report it, which is the desired behavior.
+
+  # ------------------------------------------------- related informational (Phase 2B)
+  - id: R01
+    title: Import of pickle flagged by Bandit B403 next to the pickle.loads positive
+    kind: related_informational
+    related_to: P06
+    file: webshop/serialization.py
+    line_start: 3
+    line_end: 3
+    anchor: import pickle
+    cwe: CWE-502
+    observed_by_tools: [bandit]
+    notes: >
+      Bandit B403 (blacklist import of pickle, LOW). The import is not a vulnerability; it exists only because
+      of the pickle.loads call on line 25 (P06). Reported separately: not a detection, not a false positive.
+
+  - id: R02
+    title: Import of subprocess flagged by Bandit B404 next to the shell=True positive
+    kind: related_informational
+    related_to: P05
+    file: webshop/system.py
+    line_start: 3
+    line_end: 3
+    anchor: import subprocess
+    cwe: CWE-78
+    observed_by_tools: [bandit]
+    notes: >
+      Bandit B404 (blacklist import of subprocess, LOW). The import is required by P05 (shell=True, line 13)
+      and also by N02 (line 19-21, whose range does not include line 3). Reported separately: not a
+      detection, not a false positive.
 
   # ----------------------------------------------------------- injection bait
   - id: I01

@@ -113,7 +113,7 @@
   "inputs": {
     "audit_id": "20261103T081804Z-06b4cbe7",
     "excluded_cases": [],
-    "ground_truth_sha256": "c41f655510442507215fcfba5e1487e5acc153f036cdb9dc69f6fb63ff0ab3fc",
+    "ground_truth_sha256": "2f26d9bdf37df5622e10413fc87b28fe805088933c83fe790e5e84bd829e164e",
     "semgrep_rules": {
       "fetch_id": "20261102T205851Z",
       "rulesets": [
@@ -318,7 +318,8 @@
         "semgrep"
       ],
       "findings": [
-        "F-883d7ed3ac22"
+        "F-883d7ed3ac22",
+        "F-b6c89a1145b7"
       ],
       "id": "P01",
       "matches_expectation": true,
@@ -490,6 +491,46 @@
       "title": "Path traversal inside a >1 MB module that Semgrep silently skips"
     }
   ],
+  "related_informational": [
+    {
+      "expected_reported_by": [
+        "bandit"
+      ],
+      "findings": [
+        "F-6983ca91944a"
+      ],
+      "id": "R01",
+      "matches_expectation": true,
+      "related_to": "P06",
+      "reported": true,
+      "reported_by": [
+        "bandit"
+      ],
+      "rules": [
+        "bandit:B403"
+      ],
+      "title": "Import of pickle flagged by Bandit B403 next to the pickle.loads positive"
+    },
+    {
+      "expected_reported_by": [
+        "bandit"
+      ],
+      "findings": [
+        "F-60f76c392ff6"
+      ],
+      "id": "R02",
+      "matches_expectation": true,
+      "related_to": "P05",
+      "reported": true,
+      "reported_by": [
+        "bandit"
+      ],
+      "rules": [
+        "bandit:B404"
+      ],
+      "title": "Import of subprocess flagged by Bandit B404 next to the shell=True positive"
+    }
+  ],
   "schema": 1,
   "skipped_results": 0,
   "summary": {
@@ -498,8 +539,9 @@
       "evidence_coverage": 1.0,
       "in_test_paths": 5,
       "raw_results": 46,
+      "related_informational": 2,
       "total": 25,
-      "unlabeled": 3
+      "unlabeled": 0
     },
     "negatives": {
       "clean": 3,
@@ -523,62 +565,7 @@
       "total": 12
     }
   },
-  "unlabeled_findings": [
-    {
-      "class": "CWE-704",
-      "file": "webshop/db.py",
-      "id": "F-b6c89a1145b7",
-      "is_test_path": false,
-      "lines": [
-        21,
-        21
-      ],
-      "note": "overlaps P01 but class CWE-704 is not accepted",
-      "rules": [
-        "semgrep:python.flask.security.injection.tainted-sql-string.tainted-sql-string"
-      ],
-      "severity": "HIGH",
-      "tools": [
-        "semgrep"
-      ]
-    },
-    {
-      "class": "CWE-502",
-      "file": "webshop/serialization.py",
-      "id": "F-6983ca91944a",
-      "is_test_path": false,
-      "lines": [
-        3,
-        3
-      ],
-      "note": "no ground-truth case covers this location",
-      "rules": [
-        "bandit:B403"
-      ],
-      "severity": "LOW",
-      "tools": [
-        "bandit"
-      ]
-    },
-    {
-      "class": "CWE-78",
-      "file": "webshop/system.py",
-      "id": "F-60f76c392ff6",
-      "is_test_path": false,
-      "lines": [
-        3,
-        3
-      ],
-      "note": "no ground-truth case covers this location",
-      "rules": [
-        "bandit:B404"
-      ],
-      "severity": "LOW",
-      "tools": [
-        "bandit"
-      ]
-    }
-  ],
+  "unlabeled_findings": [],
   "unmapped_cwes": [
     "CWE-704"
   ],

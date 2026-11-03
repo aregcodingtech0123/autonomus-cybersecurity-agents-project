@@ -4,6 +4,9 @@ Matching rules (docs/PHASE2_DESIGN.md section 7):
   * positive: DETECTED iff some finding overlaps a `match` range (same file, overlapping lines) AND
     its issue class is accepted; `detected_by` is the union of tools behind those findings;
   * negative / injection bait: FLAGGED iff ANY finding overlaps its range, whatever the class;
+  * related_informational (Phase 2B): a finding that overlaps its range with an accepted class is
+    LABELED and reported separately; it is neither a detection nor a false positive and never changes
+    the positive/negative counts;
   * a finding that supports no positive and lies in no negative range is UNLABELED: listed for
     manual labeling, never counted as a false positive.
 No timestamps are written, so the same inputs always give byte-identical metrics files.
@@ -53,6 +56,8 @@ class Case:
     matches: tuple[Match, ...]
     expected_tools: frozenset[str]
     expected_false_alarms: frozenset[str]
+    related_to: str | None = None
+    observed_by: frozenset[str] = frozenset()
 
 
 def finding_classes(f: SecurityFinding) -> set[str]:
@@ -107,6 +112,8 @@ def load_cases(truth: dict, exclude: tuple[str, ...] = ()) -> list[Case]:
                 matches=tuple(matches),
                 expected_tools=frozenset(raw.get("expected_detecting_tools") or []),
                 expected_false_alarms=frozenset(raw.get("observed_false_alarms") or []),
+                related_to=raw.get("related_to"),
+                observed_by=frozenset(raw.get("observed_by_tools") or []),
             )
         )
     return cases
@@ -158,7 +165,7 @@ def evaluate(
     labeled: set[str] = set()
     near_miss: dict[str, list[str]] = defaultdict(list)
 
-    positives, negatives, baits = [], [], []
+    positives, negatives, baits, related = [], [], [], []
     for case in cases:
         supporting: list[SecurityFinding] = []
         overlapping: list[SecurityFinding] = []
@@ -166,7 +173,7 @@ def evaluate(
             for f in findings:
                 if m.overlaps(f):
                     overlapping.append(f)
-                    if case.kind == "positive":
+                    if case.kind in ("positive", "related_informational"):
                         if m.accepts(f):
                             supporting.append(f)
                         else:
@@ -186,6 +193,22 @@ def evaluate(
                     "detected_by": tools,
                     "expected_detecting_tools": sorted(case.expected_tools),
                     "matches_expectation": set(tools) == set(case.expected_tools),
+                    "findings": [f.id for f in supporting],
+                }
+            )
+        elif case.kind == "related_informational":
+            tools = sorted({t for f in supporting for t in f.tools})
+            labeled.update(f.id for f in supporting)
+            related.append(
+                {
+                    "id": case.id,
+                    "title": case.title,
+                    "related_to": case.related_to,
+                    "reported": bool(supporting),
+                    "reported_by": tools,
+                    "expected_reported_by": sorted(case.observed_by),
+                    "matches_expectation": set(tools) == set(case.observed_by),
+                    "rules": sorted({f"{h.tool}:{h.rule_id}" for f in supporting for h in f.hits}),
                     "findings": [f.id for f in supporting],
                 }
             )
@@ -275,6 +298,7 @@ def evaluate(
                 "raw_results": total_raw,
                 "dedup_ratio": round(total_raw / len(findings), 2) if findings else None,
                 "unlabeled": len(unlabeled),
+                "related_informational": sum(r["reported"] for r in related),
                 "in_test_paths": len(test_findings),
                 "evidence_coverage": round(len(complete) / len(findings), 4) if findings else None,
             },
@@ -283,6 +307,7 @@ def evaluate(
         "positives": sorted(positives, key=lambda r: r["id"]),
         "negatives": sorted(negatives, key=lambda r: r["id"]),
         "injection_bait": sorted(baits, key=lambda r: r["id"]),
+        "related_informational": sorted(related, key=lambda r: r["id"]),
         "unlabeled_findings": unlabeled,
         "findings_by_severity": dict(sorted(Counter(f.severity.value for f in findings).items())),
         "findings_by_owasp_2025": dict(
@@ -335,6 +360,7 @@ def render_markdown(m: dict) -> str:
         f"{', '.join(n['flagged']) or 'none'}",
         f"- Findings: {f['total']} from {f['raw_results']} raw results (dedup ratio {f['dedup_ratio']}); "
         f"{f['unlabeled']} unlabeled, {f['in_test_paths']} in test paths; evidence coverage {_pct(f['evidence_coverage'])}",
+        f"- Related informational findings: {f['related_informational']} (not detections, not false positives)",
         "",
         "## Per case: positives",
         "",
@@ -365,6 +391,19 @@ def render_markdown(m: dict) -> str:
             f"- {r['id']}: {'clean' if r['clean'] else 'flagged by ' + ', '.join(r['flagged_by'])}"
             for r in m["injection_bait"]
         ]
+    if m["related_informational"]:
+        out += [
+            "",
+            "## Related informational (not detections, not false positives)",
+            "",
+            "| Case | Related to | Reported | Reported by | Rules |",
+            "|---|---|---|---|---|",
+        ]
+        for r in m["related_informational"]:
+            out.append(
+                f"| {r['id']} | {r['related_to']} | {'yes' if r['reported'] else 'no'} "
+                f"| {', '.join(r['reported_by']) or '-'} | {', '.join(r['rules']) or '-'} |"
+            )
     out += [
         "",
         "## Per tool: raw results vs findings",

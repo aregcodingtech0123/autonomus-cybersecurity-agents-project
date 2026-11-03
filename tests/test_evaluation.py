@@ -201,11 +201,46 @@ def test_per_tool_raw_vs_finding_counts_and_dedup_ratio():
     assert real_metrics()["summary"]["findings"]["evidence_coverage"] == 1.0
 
 
-def test_unlabeled_findings_of_the_real_baseline_are_explained():
+def test_the_three_formerly_unlabeled_findings_are_now_labeled_without_moving_the_numbers():
     m = real_metrics()
-    notes = {u["file"] + ":" + str(u["lines"][0]): u["note"] for u in m["unlabeled_findings"]}
-    assert notes["webshop/db.py:21"].startswith("overlaps P01 but class CWE-704")
-    assert set(notes) == {"webshop/db.py:21", "webshop/serialization.py:3", "webshop/system.py:3"}
+    assert m["unlabeled_findings"] == [] and m["summary"]["findings"]["unlabeled"] == 0
+    p01 = next(p for p in m["positives"] if p["id"] == "P01")
+    assert p01["detected_by"] == ["bandit", "semgrep"] and p01["matches_expectation"]
+    related = {r["id"]: r for r in m["related_informational"]}
+    assert (related["R01"]["related_to"], related["R01"]["rules"]) == ("P06", ["bandit:B403"])
+    assert (related["R02"]["related_to"], related["R02"]["rules"]) == ("P05", ["bandit:B404"])
+    assert all(r["matches_expectation"] for r in related.values())
+    assert m["summary"]["positives"]["total"] == 11 and m["summary"]["positives"]["detected"] == 9
+    assert (
+        m["summary"]["negatives"]["total"] == 7 and len(m["summary"]["negatives"]["flagged"]) == 4
+    )
+
+
+def test_related_informational_is_labeled_but_neither_detection_nor_false_positive():
+    rel = {
+        "id": "R1", "kind": "related_informational", "title": "r", "related_to": "P1",
+        "file": "a.py", "line_start": 1, "line_end": 1, "cwe": "CWE-502", "observed_by_tools": ["bandit"],
+    }  # fmt: skip
+    m = run_eval([finding("F1", "a.py", 1, 1, "CWE-502", cwes=("CWE-502",))], pos(), rel)
+    assert m["unlabeled_findings"] == []
+    assert m["summary"]["positives"]["total"] == 1 and m["summary"]["positives"]["detected"] == 0
+    assert (
+        m["summary"]["negatives"]["total"] == 0
+        and m["summary"]["findings"]["related_informational"] == 1
+    )
+    assert m["related_informational"][0]["reported_by"] == ["bandit"]
+    wrong = run_eval([finding("F1", "a.py", 1, 1, "CWE-1")], pos(), rel)
+    assert not wrong["related_informational"][0]["reported"], "only accepted classes are labeled"
+    assert [u["id"] for u in wrong["unlabeled_findings"]] == ["F1"]
+    assert run_eval([], pos(), rel, exclude=("R1",))["related_informational"] == []
+
+
+def test_p01_accepts_the_semgrep_cwe704_tag_on_line_21_only():
+    case = next(c for c in evaluation.load_cases(evaluation.load_truth(TRUTH)) if c.id == "P01")
+    at21 = finding("F1", "webshop/db.py", 21, 21, "CWE-704", cwes=("CWE-704",))
+    at22 = finding("F2", "webshop/db.py", 22, 22, "CWE-704", cwes=("CWE-704",))
+    assert any(m.overlaps(at21) and m.accepts(at21) for m in case.matches)
+    assert not any(m.overlaps(at22) and m.accepts(at22) for m in case.matches)
 
 
 def test_metrics_are_deterministic_and_secret_free():

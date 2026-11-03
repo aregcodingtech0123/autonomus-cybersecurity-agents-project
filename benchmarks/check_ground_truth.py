@@ -20,8 +20,13 @@ BENCH_DIR = Path(__file__).resolve().parent
 DEFAULT_GROUND_TRUTH = BENCH_DIR / "expected_findings.yaml"
 REPO_ROOT = BENCH_DIR.parent
 
-KINDS = {"positive", "negative", "injection_bait"}
-KIND_PREFIX = {"positive": "P", "negative": "N", "injection_bait": "I"}
+KINDS = {"positive", "negative", "injection_bait", "related_informational"}
+KIND_PREFIX = {
+    "positive": "P",
+    "negative": "N",
+    "injection_bait": "I",
+    "related_informational": "R",
+}
 TOOLS = {"semgrep", "bandit", "gitleaks", "pip-audit"}
 REQUIRED = ("id", "title", "kind", "file", "line_start", "line_end", "anchor", "notes")
 CWE_RE = re.compile(r"^CWE-\d+$")
@@ -30,6 +35,7 @@ EXPECTED_IDS = (
     | {"P08b", "P11"}
     | {f"N{i:02d}" for i in range(1, 8)}
     | {f"I{i:02d}" for i in range(1, 3)}
+    | {"R01", "R02"}
 )
 
 
@@ -54,6 +60,7 @@ def check(path: Path = DEFAULT_GROUND_TRUTH) -> list[str]:
         seen.add(cid)
 
     problems.extend(generated_problems)
+    problems.extend(_check_related(doc["cases"]))
     missing = EXPECTED_IDS - seen
     if missing:
         problems.append(f"missing planned cases: {sorted(missing)}")
@@ -93,13 +100,28 @@ def _ensure_generated(cases: list, target: Path) -> list[str]:
     return problems
 
 
+def _check_related(cases: list) -> list[str]:
+    """`related_to` of a related_informational item must name an existing positive or negative."""
+    kinds = {c.get("id"): c.get("kind") for c in cases if isinstance(c, dict)}
+    problems: list[str] = []
+    for case in cases:
+        if not isinstance(case, dict) or case.get("kind") != "related_informational":
+            continue
+        target = case.get("related_to")
+        if kinds.get(target) not in ("positive", "negative"):
+            problems.append(
+                f"{case.get('id')}: related_to {target!r} must name an existing positive/negative"
+            )
+    return problems
+
+
 def _check_match(case: dict, target: Path) -> list[str]:
     """Optional `match:` entries (Phase 2A): ranges and accepted classes for `secaudit eval`."""
     problems: list[str] = []
     entries = case.get("match")
     if entries is None:
-        if case["kind"] == "positive" and case.get("cwe") is None:
-            problems.append("positive case without cwe needs a match entry with classes")
+        if case["kind"] in ("positive", "related_informational") and case.get("cwe") is None:
+            problems.append(f"{case['kind']} case without cwe needs a match entry with classes")
         return problems
     if not isinstance(entries, list) or not entries:
         return ["match must be a non-empty list"]
@@ -122,7 +144,9 @@ def _check_match(case: dict, target: Path) -> list[str]:
         cwes = [cwes] if isinstance(cwes, str) else cwes
         if any(not CWE_RE.match(str(c)) for c in cwes):
             problems.append(f"{where}: malformed cwe in {cwes!r}")
-        if case["kind"] == "positive" and not (cwes or entry.get("classes")):
+        if case["kind"] in ("positive", "related_informational") and not (
+            cwes or entry.get("classes")
+        ):
             problems.append(f"{where}: positive match needs cwe or classes")
     return problems
 
@@ -140,7 +164,7 @@ def _check_case(case: dict, target: Path) -> list[str]:
 
     if case.get("cwe") is not None and not CWE_RE.match(str(case["cwe"])):
         problems.append(f"malformed cwe {case['cwe']!r}")
-    for key in ("expected_detecting_tools", "observed_false_alarms"):
+    for key in ("expected_detecting_tools", "observed_false_alarms", "observed_by_tools"):
         unknown = set(case.get(key) or []) - TOOLS
         if unknown:
             problems.append(f"unknown tools in {key}: {sorted(unknown)}")
@@ -148,6 +172,12 @@ def _check_case(case: dict, target: Path) -> list[str]:
         problems.append("only positive cases may list expected_detecting_tools")
     if kind != "negative" and case.get("observed_false_alarms"):
         problems.append("only negative cases may list observed_false_alarms")
+    if kind != "related_informational" and case.get("observed_by_tools"):
+        problems.append("only related_informational cases may list observed_by_tools")
+    if kind == "related_informational" and case.get("expected_detecting_tools"):
+        problems.append(
+            "related_informational items are not detections: no expected_detecting_tools"
+        )
 
     file_path = (target / case["file"]).resolve()
     if not file_path.is_relative_to(target):

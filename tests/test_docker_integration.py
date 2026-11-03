@@ -367,6 +367,8 @@ def test_parity_exact_match_with_recorded_baseline(scan_outcome):
     for case in cases:
         if case["kind"] == "injection_bait":
             expected = set()
+        elif case["kind"] == "related_informational":
+            expected = set(case.get("observed_by_tools") or [])
         elif case["kind"] == "positive":
             expected = set(case.get("expected_detecting_tools") or [])
         else:

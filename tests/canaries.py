@@ -24,7 +24,7 @@ def _rep(fragment: str, times: int) -> str:
 
 # ---------------------------------------------------------------- the benchmark's planted fakes
 # benchmarks/targets/** keeps these values as literals on purpose: they ARE the vulnerability under
-# test. Since ADR-003 they are generic-shaped (`bench_` prefix, random body), so they match no
+# test. Since ADR-002 they are generic-shaped (`bench_` prefix, random body), so they match no
 # provider format and may be ordinary literals here too. test_no_secret_literals.py checks that
 # each one still equals what the benchmark target contains, so none of them can drift.
 

@@ -1,7 +1,7 @@
 """Build real audit directories (manifest + raw + findings.json [+ source]) for storage/report tests.
 
 They are made from the COMMITTED baseline: its raw outputs, its manifest and the benchmark target as
-the retained source, so the data is the real 24-finding audit (25 before ADR-003), not a hand-made stand-in.
+the retained source, so the data is the real 24-finding audit (25 before ADR-002), not a hand-made stand-in.
 """
 
 from __future__ import annotations

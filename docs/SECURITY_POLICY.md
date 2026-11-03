@@ -184,7 +184,7 @@ there. (It *is* scanned on purpose by the benchmark, inside the sandbox.)
   harmless fragments when a test calls it, so no realistic token literal sits in the repository or its history. Tests
   must pass on a fresh clone and in CI with no environment file, so fixtures never come from `.env`.
   `tests/test_no_secret_literals.py` scans every tracked file and fails on a provider-shaped literal.
-- **No provider-shaped value anywhere** (ADR-003): no file in the repository or its history holds a value
+- **No provider-shaped value anywhere** (ADR-002): no file in the repository or its history holds a value
   shaped like a provider credential (Stripe, AWS, GitHub, Slack, Google, GitLab, SendGrid, Shopify, npm, PyPI,
   Hugging Face, DigitalOcean, PEM private keys, JWTs, URLs with credentials), not even a fake one, not even
   in benchmark data, raw scanner outputs or frozen fixtures. `tests/test_no_secret_literals.py` enforces this

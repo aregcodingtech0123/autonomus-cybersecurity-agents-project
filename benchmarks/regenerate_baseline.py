@@ -2,7 +2,7 @@
 
     uv run python benchmarks/regenerate_baseline.py [--allow-rules-change]
 
-What it does (ADR-003, docs/DECISIONS.md):
+What it does (ADR-002, docs/DECISIONS.md):
 
 1. Generates the git-ignored P11 module (benchmarks/p11_generator.py) so the scan sees 16 files.
 2. Runs `secaudit scan` with the Docker runner on benchmarks/targets/vuln_python_app into a

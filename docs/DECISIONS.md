@@ -23,7 +23,7 @@ One record per decision that is expensive to reverse or easy to forget the reaso
   and P11, which no registry rule detects) or obtain a license. Until then this ADR is the boundary.
 - **Related:** `docs/PHASE1_NOTES.md` (license summary), `docs/ROADMAP.md`.
 
-## ADR-003: No provider-shaped value anywhere; the benchmark's planted secrets are generic-shaped
+## ADR-002: No provider-shaped value anywhere; the benchmark's planted secrets are generic-shaped
 
 - **Status:** accepted (2026-11-03), before the repository's first push
 - **Context:** GitHub push protection scans every commit of a push and blocks provider-shaped tokens even

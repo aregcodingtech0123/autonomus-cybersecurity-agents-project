@@ -23,6 +23,7 @@ class Behaviour:
     flood: bool = False
     raises: Exception | None = None
     reported_version: str | None = None  # what `--version` prints; None = pinned
+    extra: dict[str, bytes] | None = None  # additional output files to write next to the main one
 
 
 @dataclass
@@ -63,6 +64,8 @@ class FakeExecutor:
             self.seen_workspaces[adapter.name] = prepared.src_dir
         if behaviour.write is not None:
             (out_dir / adapter.output_filename).write_bytes(behaviour.write)
+        for name, data in (behaviour.extra or {}).items():
+            (out_dir / name).write_bytes(data)
         return ExecOutcome(
             None if behaviour.timed_out else behaviour.exit_code,
             0.01,

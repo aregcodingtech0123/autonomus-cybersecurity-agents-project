@@ -147,6 +147,8 @@ def build_manifest(
             "unresolved",
             "version_check",
             "limitations",
+            "extra_artifacts",
+            "extra_output_problems",
         ):
             if key in extra:
                 entry[{"rules": "ruleset_info"}.get(key, key)] = extra[key]

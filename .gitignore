@@ -30,3 +30,6 @@ Thumbs.db
 # secaudit runtime state (never commit fetched rules or audit output)
 .secaudit/
 audits/
+
+# generated benchmark file for case P11 (benchmarks/p11_generator.py); >1 MB, never committed
+benchmarks/targets/vuln_python_app/webshop/generated_big_module.py

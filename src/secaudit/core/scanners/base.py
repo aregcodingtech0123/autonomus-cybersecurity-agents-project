@@ -107,6 +107,7 @@ class ScannerAdapter:
     name: str
     version: str  # pinned
     output_filename: str
+    extra_outputs: tuple[str, ...] = ()  # optional additional result files (coverage etc.)
     artifact_kind: str  # "sarif" | "json"
     completed_exit_codes: frozenset[int] = frozenset({0, 1})
     # Known coverage gaps, copied into manifest.json so Phase 2's coverage model can surface them.
@@ -236,12 +237,51 @@ def run_adapter(
     destination = raw_dir / adapter.output_filename
     shutil.copyfile(source, destination)
     make_private(destination)
+    common["extra"] = {**common["extra"], **_collect_extra_outputs(adapter, out_dir, raw_dir)}
     return result(
         "completed",
         raw_artifact_path=destination,
         artifact_sha256=hashlib.sha256(data).hexdigest(),
         **common,
     )
+
+
+def _collect_extra_outputs(adapter: ScannerAdapter, out_dir: Path, raw_dir: Path) -> dict:
+    """Optional extra result files (e.g. Semgrep's JSON, used for coverage). Never a failure reason:
+    a missing, oversized, non-regular or malformed extra file is reported, not trusted."""
+    collected: list[dict] = []
+    problems: list[str] = []
+    for filename in adapter.extra_outputs:
+        source = out_dir / filename
+        st = _lstat_regular(source)
+        if st is None:
+            problems.append(f"{adapter.name}: extra output {filename} was not produced")
+            continue
+        if st.st_size > MAX_ARTIFACT_BYTES:
+            problems.append(f"{adapter.name}: extra output {filename} is too large and was ignored")
+            continue
+        data = source.read_bytes()
+        try:
+            json.loads(data)
+        except ValueError:
+            problems.append(f"{adapter.name}: extra output {filename} is not valid JSON")
+            continue
+        destination = raw_dir / filename
+        shutil.copyfile(source, destination)
+        make_private(destination)
+        collected.append(
+            {
+                "path": f"raw/{filename}",
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "bytes": len(data),
+            }
+        )
+    out: dict = {}
+    if collected:
+        out["extra_artifacts"] = collected
+    if problems:
+        out["extra_output_problems"] = problems
+    return out
 
 
 def _version_note(adapter: ScannerAdapter, reported: str | None) -> dict:

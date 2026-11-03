@@ -28,27 +28,66 @@ def _paths(values: object) -> tuple[list[str], int]:
     return sorted(set(good))[:MAX_FILES_LISTED], dropped
 
 
-def semgrep_coverage(doc: object, limitations: tuple[str, ...]) -> ToolCoverage:
-    """Semgrep's JSON output lists `paths.scanned` and `paths.skipped` (with reasons)."""
+def semgrep_coverage(
+    doc: object, limitations: tuple[str, ...], source_files: list[str] | None = None
+) -> ToolCoverage:
+    """Semgrep's JSON lists `paths.scanned`. Its `paths.skipped` is absent in this output mode, so
+    skipped files are derived: files that exist in the retained source tree but are NOT in `scanned`
+    (this is how a >1 MB file Semgrep silently ignores becomes visible)."""
     paths = doc.get("paths") if isinstance(doc, dict) else None
     if not isinstance(paths, dict) or not isinstance(paths.get("scanned"), list):
         return unknown_coverage("semgrep", limitations, "semgrep JSON has no paths.scanned")
     scanned, _dropped = _paths(paths["scanned"])
     skipped: list[SkippedFile] = []
-    for entry in paths.get("skipped") or []:
-        if isinstance(entry, dict):
-            path, _why = normalize_source_path(entry.get("path"))
-            if path:
-                reason = entry.get("reason")
-                skipped.append(
-                    SkippedFile(path=path, reason=reason[:80] if isinstance(reason, str) else None)
-                )
+    listed = paths.get("skipped")
+    if isinstance(listed, list):
+        for entry in listed:
+            if isinstance(entry, dict):
+                path, _why = normalize_source_path(entry.get("path"))
+                if path:
+                    reason = entry.get("reason")
+                    skipped.append(
+                        SkippedFile(
+                            path=path, reason=reason[:80] if isinstance(reason, str) else None
+                        )
+                    )
+    elif source_files is not None:
+        seen = set(scanned)
+        skipped = [
+            SkippedFile(path=p, reason="in the source tree but absent from semgrep paths.scanned")
+            for p in sorted(set(source_files) - seen)[:MAX_FILES_LISTED]
+        ]
     return ToolCoverage(
         tool="semgrep",
         status="known",
         analyzed_files=tuple(scanned),
-        skipped_files=tuple(sorted(skipped, key=lambda s: s.path)[:MAX_FILES_LISTED]),
+        skipped_files=tuple(sorted(skipped, key=lambda s: s.path)[:MAX_FILES_LISTED])
+        if (isinstance(listed, list) or source_files is not None)
+        else None,
         limitations=limitations,
+        note=None
+        if (isinstance(listed, list) or source_files is not None)
+        else "no source to diff against: skipped files unknown",
+    )
+
+
+def pip_audit_coverage(entry: dict, limitations: tuple[str, ...]) -> ToolCoverage:
+    """pip-audit coverage is known from the manifest: files read, lines left unresolved."""
+    files = tuple(sorted(f for f in entry.get("requirements_files", []) if isinstance(f, str)))
+    if not files and not entry.get("pinned_requirements"):
+        return unknown_coverage("pip-audit", limitations, "manifest lists no requirements files")
+    unresolved = [
+        SkippedFile(path=f"{u.get('file')}:{u.get('line')}", reason=str(u.get("reason"))[:60])
+        for u in entry.get("unresolved", [])
+        if isinstance(u, dict)
+    ]
+    return ToolCoverage(
+        tool="pip-audit",
+        status="known",
+        analyzed_files=files,
+        skipped_files=tuple(unresolved),
+        limitations=limitations,
+        note="exact pins only; skipped entries are requirement lines that were not audited",
     )
 
 

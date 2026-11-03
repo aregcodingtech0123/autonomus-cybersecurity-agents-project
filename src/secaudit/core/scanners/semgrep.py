@@ -22,6 +22,8 @@ class SemgrepAdapter(ScannerAdapter):
     version = "1.183.0"
     output_filename = "semgrep.sarif"
     artifact_kind = "sarif"
+    # The JSON copy lists `paths.scanned`; it is the cheap source of Semgrep coverage data.
+    extra_outputs = ("semgrep.json",)
     limitations = (
         "Files larger than 1,000,000 bytes (--max-target-bytes default) are skipped without "
         "any notification in the SARIF (verified 2026-11-03); parse errors, in contrast, are "
@@ -55,6 +57,7 @@ class SemgrepAdapter(ScannerAdapter):
             "--no-rewrite-rule-ids",
             "--quiet",
             f"--sarif-output={paths.out_file(self.output_filename)}",
+            f"--json-output={paths.out_file(self.extra_outputs[0])}",
             ".",
         ]
         return command

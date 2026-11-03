@@ -12,6 +12,13 @@
 #                           p/flask + p/security-audit, tests/ scanned). Empty = missed by every
 #                           tool. The older native runs are in benchmarks/baseline/raw_native/.
 #   observed_false_alarms   negatives only: tools that flagged the safe look-alike anyway.
+#   match                   optional list of {file, line_start, line_end, cwe: [...], classes: [...]}
+#                           used by `secaudit eval` (Phase 2A). A positive is detected when a finding
+#                           overlaps a match range AND its issue class is accepted (CWE ids are folded
+#                           through the reviewed equivalences; `classes` may use `*` globs, e.g. vuln:*).
+#                           Without `match`, the case's own file/lines/cwe are used.
+#   generated               the case file is produced by a committed generator (P11): generator, path,
+#                           sha256, min_bytes. The checker and `secaudit eval` regenerate it when missing.
 #   expected_detecting_tools for negatives and bait is always empty: nobody SHOULD report them.
 #
 # Paths are relative to benchmarks/targets/vuln_python_app/.
@@ -189,6 +196,28 @@ cases:
     expected_detecting_tools: []
     notes: >
       Missed by Bandit, Semgrep (p/python and p/flask + p/security-audit) and Gitleaks.
+
+  - id: P11
+    title: Path traversal inside a >1 MB module that Semgrep silently skips
+    kind: positive
+    file: webshop/generated_big_module.py
+    line_start: 84013
+    line_end: 84013
+    anchor: open(request.args.get("f"), "rb")
+    cwe: CWE-22
+    expected_detecting_tools: []
+    generated:
+      generator: benchmarks/p11_generator.py
+      path: webshop/generated_big_module.py
+      sha256: b3873b0aa0ff0a1fdc494f1086373b8210f759b3bc0bd62af90e837283c26cc3
+      min_bytes: 1000001
+    notes: >
+      Added in Phase 2A. The file is generated (deterministically, ~1.08 MB, git-ignored) so Semgrep's
+      1,000,000-byte limit applies. The same pattern IS detected by Semgrep's python.flask
+      path-traversal-open rule in a small file (verified natively, 2026-11-03), but the big file is in
+      neither Semgrep's paths.scanned nor any result; Bandit analyses the file (it appears in its metrics)
+      but has no rule for open(<request data>). Expected: missed by every tool. To be confirmed against the
+      container baseline when it is regenerated.
 
   # ---------------------------------------------------------------- negatives
   - id: N01

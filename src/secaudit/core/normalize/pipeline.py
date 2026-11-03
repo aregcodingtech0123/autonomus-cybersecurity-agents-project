@@ -22,6 +22,7 @@ from secaudit.core.models import (
 from secaudit.core.normalize.coverage import (
     bandit_coverage,
     load_optional_json,
+    pip_audit_coverage,
     semgrep_coverage,
     unknown_coverage,
 )
@@ -42,6 +43,20 @@ DID_NOT_RUN = {"failed", "timeout", "skipped"}
 
 def _str_list(value: object) -> tuple[str, ...]:
     return tuple(v for v in value if isinstance(v, str)) if isinstance(value, list) else ()
+
+
+def _source_files(source_root: Path | None, limit: int = 20_000) -> list[str] | None:
+    """POSIX-relative files in the retained source tree (bounded), or None without source."""
+    if source_root is None or not Path(source_root).is_dir():
+        return None
+    files: list[str] = []
+    root = Path(source_root)
+    for path in root.rglob("*"):
+        if len(files) >= limit:
+            break
+        if path.is_file() and not path.is_symlink():
+            files.append(path.relative_to(root).as_posix())
+    return sorted(files)
 
 
 def normalize_audit(
@@ -98,7 +113,11 @@ def normalize_audit(
             if isinstance(entry.get("unresolved"), list)
             else (),
         )
-        coverage.append(unknown_coverage(tool, limitations, "tool does not report analysed files"))
+        note = {
+            "bandit": "bandit lists analysed files only in its JSON format; no second run is made",
+            "gitleaks": "gitleaks does not report which files it scanned",
+        }.get(tool, "tool does not report analysed files")
+        coverage.append(unknown_coverage(tool, limitations, note))
         if status in DID_NOT_RUN or not path.is_file():
             if status not in DID_NOT_RUN:
                 status = "missing"
@@ -151,8 +170,12 @@ def normalize_audit(
         extra = COVERAGE_ARTIFACTS.get(tool)
         if extra and (raw_dir / extra).is_file():
             cov_doc = load_optional_json(raw_dir / extra)
-            cov = (semgrep_coverage if tool == "semgrep" else bandit_coverage)(cov_doc, limitations)
-            coverage[-1] = cov
+            if tool == "semgrep":
+                coverage[-1] = semgrep_coverage(cov_doc, limitations, _source_files(source_root))
+            else:
+                coverage[-1] = bandit_coverage(cov_doc, limitations)
+        if tool == "pip-audit" and entry:
+            coverage[-1] = pip_audit_coverage(entry, limitations)
 
     gitleaks_lines: dict[str, set[int]] = {}
     for hit in all_hits:

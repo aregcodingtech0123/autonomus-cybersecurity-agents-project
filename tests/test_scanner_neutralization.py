@@ -19,6 +19,8 @@ pytestmark = [pytest.mark.docker, pytest.mark.usefixtures("docker_images")]
 
 REPO = Path(__file__).resolve().parent.parent
 TARGET = REPO / "benchmarks" / "targets" / "vuln_python_app"
+# P11's generated >1 MB module is excluded: these tests compare exact result counts on the small target.
+IGNORE_GENERATED = shutil.ignore_patterns("generated_big_module.py")
 BASELINE_RAW = REPO / "benchmarks" / "baseline" / "raw"
 
 
@@ -202,7 +204,7 @@ def test_planted_file_cannot_change_results(
     tmp_path, rules_cache, tool, case_id, mutate, expected_neutralized
 ):
     project = tmp_path / "proj"
-    shutil.copytree(TARGET, project)
+    shutil.copytree(TARGET, project, ignore=IGNORE_GENERATED)
     mutate(project)
     outcome = run_scan(
         str(project),
@@ -224,7 +226,7 @@ def test_planted_file_cannot_change_results(
 
 def test_pip_audit_ignores_hostile_requirements_options(tmp_path):
     project = tmp_path / "proj"
-    shutil.copytree(TARGET, project)
+    shutil.copytree(TARGET, project, ignore=IGNORE_GENERATED)
     req = project / "requirements.txt"
     req.write_text(
         req.read_text(encoding="utf-8")

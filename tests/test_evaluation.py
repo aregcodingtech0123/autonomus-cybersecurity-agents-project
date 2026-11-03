@@ -238,6 +238,8 @@ def test_cli_eval_works_without_docker_and_writes_both_files(tmp_path, capsys):
             str(TARGET),
             "--out-dir",
             str(tmp_path),
+            "--exclude",
+            "P11",  # the frozen Phase 1 raw predates P11
         ]
     )
     out = capsys.readouterr().out
@@ -258,6 +260,8 @@ def test_cli_eval_exclude_flag(tmp_path, capsys):
             str(TARGET),
             "--out-dir",
             str(tmp_path),
+            "--exclude",
+            "P11",
             "--exclude",
             "P08",
             "--exclude",

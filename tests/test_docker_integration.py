@@ -400,7 +400,9 @@ def test_cli_scan_end_to_end_exit_code_and_layout(tmp_path, rules_cache, capsys)
 def test_zip_input_round_trips_through_the_sandbox(tmp_path, rules_cache):
     import shutil
 
-    archive = shutil.make_archive(str(tmp_path / "target"), "zip", TARGET)
+    small = tmp_path / "target_without_generated"
+    shutil.copytree(TARGET, small, ignore=shutil.ignore_patterns("generated_big_module.py"))
+    archive = shutil.make_archive(str(tmp_path / "target"), "zip", small)
     options = ScanOptions(out_root=tmp_path / "audits", tools=("bandit", "gitleaks"))
     outcome = run_scan(archive, options, rules=rules_cache)
     manifest = outcome.manifest

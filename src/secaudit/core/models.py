@@ -74,6 +74,13 @@ class RawRef(_Model):
     artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     pointer: str  # JSON pointer, e.g. "/runs/0/results/3" or "/dependencies/2/vulns/1"
 
+    @property
+    def pointer_sort(self) -> tuple:
+        """Natural sort key ("results/2" before "results/10") so ordering is deterministic."""
+        return tuple(
+            (0, int(p), "") if p.isdigit() else (1, 0, p) for p in self.pointer.split("/")[1:]
+        )
+
 
 class ToolHit(_Model):
     """One result of one tool, reduced to location and metadata. No code text."""
@@ -93,6 +100,8 @@ class ToolHit(_Model):
     cwe_ids: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()  # pip-audit: advisory ids (PYSEC / GHSA / CVE)
     fix_versions: tuple[str, ...] = ()
+    package: str | None = None  # pip-audit only: the vulnerable distribution
+    package_version: str | None = None
     raw_ref: RawRef
 
     @field_validator("file_path")
@@ -180,6 +189,7 @@ class ToolRun(_Model):
     artifact_sha256: str | None = None
     raw_results: int = 0
     hits: int = 0
+    unique_hits: int = 0  # after collapsing identical results of the same tool
     skipped_results: int = 0
     detail: str = ""
     unresolved_requirements: tuple[dict, ...] = ()

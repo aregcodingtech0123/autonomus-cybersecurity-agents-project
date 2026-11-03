@@ -109,6 +109,8 @@ def parse_pip_audit(
                         cwe_ids=(),
                         aliases=aliases,
                         fix_versions=fixes,
+                        package=name,
+                        package_version=version,
                         raw_ref=RawRef(artifact=artifact, artifact_sha256=sha256, pointer=pointer),
                     )
                 )

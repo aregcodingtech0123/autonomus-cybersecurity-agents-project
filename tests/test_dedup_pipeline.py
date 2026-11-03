@@ -330,7 +330,7 @@ def test_pipeline_real_baseline_counts():
         "pip-audit": (16, 16, 8, 0),
     }
     assert len(a.findings) == 25 and all(f.hits for f in a.findings)
-    assert a.audit_id and a.input.kind == "directory" and a.source.retained is True
+    assert a.audit_id and a.input.kind == "directory" and a.source.available is True
 
 
 def test_every_hit_points_back_at_the_right_raw_result_with_the_right_hash():
@@ -363,7 +363,7 @@ def test_no_planted_secret_appears_anywhere_in_the_derived_export():
 
 def test_export_has_the_schema_version_and_is_valid_json():
     doc = json.loads(export_json(baseline_audit()))
-    assert doc["schema_version"] == "1" and len(doc["findings"]) == 25
+    assert doc["schema_version"] == "2" and len(doc["findings"]) == 25
     assert all(
         f["triage"] is None and f["risk"] is None and f["remediation"] is None
         for f in doc["findings"]
@@ -438,7 +438,7 @@ def test_manifest_fields_flow_into_the_audit(tmp_path):
         "neutralized_files": [".bandit", "x/.semgrepignore"],
         "tools": {"gitleaks": {"status": "completed", "version": "8.30.1", "limitations": ["no history", "path allowlist"]}},
         "input": {"kind": "zip", "source": "p.zip", "sha256": "ab", "file_count": 3, "total_bytes": 10, "commit": None},
-        "source": {"retained": True, "path": "source", "injected_files": [".semgrepignore"]},
+        "source": {"retained_at_scan": True, "committed": False, "path": "source", "injected_files": [".semgrepignore"]},
     }  # fmt: skip
     a = normalize_audit(d, manifest=manifest, source_root=None)
     assert a.neutralized_files == (".bandit", "x/.semgrepignore") and a.input.kind == "zip"
@@ -447,3 +447,45 @@ def test_manifest_fields_flow_into_the_audit(tmp_path):
         and a.coverage[0].status == "unknown"
     )
     assert a.source.injected_files == (".semgrepignore",) and a.tool_runs[0].version == "8.30.1"
+
+
+def _source_of(tmp_path, source_block, source_root):
+    raw = tmp_path / "raw"
+    raw.mkdir(exist_ok=True)
+    manifest = {"audit_id": "A1", "tool_order": [], "tools": {}, "source": source_block}
+    return normalize_audit(raw, manifest=manifest, source_root=source_root).source
+
+
+def test_source_flags_are_three_separate_facts(tmp_path):
+    block = {"retained_at_scan": True, "committed": False, "path": "source"}
+    kept = _source_of(tmp_path, block, tmp_path)
+    assert (kept.retained_at_scan, kept.committed, kept.available) == (True, False, True)
+    # the committed-baseline situation: the scan kept the source, but it is not here any more
+    gone = _source_of(tmp_path, block, None)
+    assert (gone.retained_at_scan, gone.committed, gone.available) == (True, False, False)
+    missing_dir = _source_of(tmp_path, block, tmp_path / "no-such-dir")
+    assert missing_dir.available is False
+
+
+def test_legacy_manifest_key_retained_is_still_understood(tmp_path):
+    legacy = _source_of(tmp_path, {"retained": True, "path": "source"}, None)
+    assert legacy.retained_at_scan is True and legacy.committed is False
+    assert _source_of(tmp_path, {"retained": "yes"}, None).retained_at_scan is None, "not a bool"
+    assert _source_of(tmp_path, None, None).retained_at_scan is None, "audits without the block"
+
+
+def test_the_committed_baseline_manifest_says_the_source_is_not_committed():
+    manifest = json.loads(
+        (BASELINE.parent.parent.parent / "benchmarks/baseline/manifest.json").read_text("utf-8")
+    )
+    assert (
+        manifest["source"]["retained_at_scan"] is True and manifest["source"]["committed"] is False
+    )
+    assert "retained" not in manifest["source"]
+    assert not (BASELINE.parent.parent.parent / "benchmarks/baseline/source").exists()
+
+
+def test_bumping_the_schema_version_does_not_change_finding_ids():
+    from secaudit.core.normalize.dedup import FINGERPRINT_TAG
+
+    assert FINGERPRINT_TAG == "secaudit-fp-v1"

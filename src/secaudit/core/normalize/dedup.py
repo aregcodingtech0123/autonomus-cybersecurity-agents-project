@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from secaudit.core.models import (
-    SCHEMA_VERSION,
     Confidence,
     SecurityFinding,
     Severity,
@@ -30,7 +29,8 @@ from secaudit.core.normalize.pip_audit import canonical_name
 from secaudit.core.normalize.severity_map import map_severity
 from secaudit.core.normalize.snippets import flagged_text, is_test_path, make_snippet
 
-FINGERPRINT_TAG = f"secaudit-fp-v{SCHEMA_VERSION}"
+# Names the fingerprint ALGORITHM, not the export schema: a SCHEMA_VERSION bump must not change ids.
+FINGERPRINT_TAG = "secaudit-fp-v1"
 
 
 def hit_classes(hit: ToolHit) -> frozenset[str]:

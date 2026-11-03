@@ -293,7 +293,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             f"  {name:10} {tool['status']:9} exit={tool['exit_code']}  {tool['duration_s']}s{extra}"
         )
     source = manifest.get("source") or {}
-    if source.get("retained"):
+    if source.get("retained_at_scan", source.get("retained")):
         where = f"{outcome.audit_dir.as_posix()}/{source.get('path', 'source')}"
         access = (
             "owner-only access"

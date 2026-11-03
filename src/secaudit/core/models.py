@@ -18,7 +18,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-SCHEMA_VERSION = "1"
+# "2": SourceInfo split into retained_at_scan / committed / available (Phase 2B).
+SCHEMA_VERSION = "2"
 MAX_MESSAGE_CHARS = 500
 MAX_SNIPPET_CHARS = 1500
 MAX_PATH_CHARS = 1024
@@ -196,7 +197,19 @@ class ToolRun(_Model):
 
 
 class SourceInfo(_Model):
-    retained: bool = False
+    """Three different facts that used to share one flag (`retained`):
+
+    retained_at_scan  the scan copied the sanitized source into the audit directory (manifest;
+                      None when the manifest does not say, e.g. audits from before Phase 2A)
+    committed         the source directory is part of a committed/shared artifact next to this
+                      audit (manifest; false unless stated, the committed baseline has none)
+    available         the source text was readable when this audit was normalized, so snippets
+                      and content fingerprints exist (computed, never read from the manifest)
+    """
+
+    retained_at_scan: bool | None = None
+    committed: bool = False
+    available: bool = False
     path: str | None = None
     injected_files: tuple[str, ...] = ()
 

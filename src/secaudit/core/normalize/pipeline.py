@@ -45,6 +45,14 @@ def _str_list(value: object) -> tuple[str, ...]:
     return tuple(v for v in value if isinstance(v, str)) if isinstance(value, list) else ()
 
 
+def _flag(block: dict | None, *keys: str) -> bool | None:
+    """First of `keys` that holds a real bool (legacy manifests used `retained`), else None."""
+    for key in keys:
+        if block and isinstance(block.get(key), bool):
+            return block[key]
+    return None
+
+
 def _source_files(source_root: Path | None, limit: int = 20_000) -> list[str] | None:
     """POSIX-relative files in the retained source tree (bounded), or None without source."""
     if source_root is None or not Path(source_root).is_dir():
@@ -223,7 +231,9 @@ def normalize_audit(
             **{k: inp.get(k) for k in AuditInput.model_fields if isinstance(inp.get(k), (str, int))}
         ),
         source=SourceInfo(
-            retained=source_root is not None,
+            retained_at_scan=_flag(src, "retained_at_scan", "retained"),
+            committed=bool(src.get("committed") is True) if src else False,
+            available=source_root is not None and Path(source_root).is_dir(),
             path=src.get("path") if src and isinstance(src.get("path"), str) else None,
             injected_files=injected,
         ),

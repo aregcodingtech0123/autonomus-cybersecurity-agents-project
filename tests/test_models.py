@@ -112,4 +112,4 @@ def test_severity_ordering_and_schema_version():
     assert (
         Severity.CRITICAL.rank > Severity.HIGH.rank > Severity.MEDIUM.rank > Severity.UNKNOWN.rank
     )
-    assert Audit().schema_version == SCHEMA_VERSION == "1"
+    assert Audit().schema_version == SCHEMA_VERSION == "2"

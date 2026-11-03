@@ -62,7 +62,7 @@ def test_source_is_retained_by_default_and_matches_what_the_scanners_saw(
     assert (source / ".semgrepignore").is_file()
     info = outcome.manifest["source"]
     assert info == {
-        "retained": True, "path": "source", "injected_files": [".semgrepignore"], "restricted_to_owner": info["restricted_to_owner"],
+        "retained_at_scan": True, "committed": False, "path": "source", "injected_files": [".semgrepignore"], "restricted_to_owner": info["restricted_to_owner"],
     }  # fmt: skip
     assert isinstance(info["restricted_to_owner"], bool)
     assert list(sys_tmp.iterdir()) == [], (
@@ -79,7 +79,7 @@ def test_no_keep_source_deletes_it(project, tmp_path, sys_tmp):
     outcome = scan(project, tmp_path, keep_source=False)
     assert not (outcome.audit_dir / "source").exists()
     assert (
-        outcome.manifest["source"]["retained"] is False
+        outcome.manifest["source"]["retained_at_scan"] is False
         and outcome.manifest["source"]["path"] is None
     )
     assert list(sys_tmp.iterdir()) == []
@@ -96,7 +96,7 @@ def test_retained_source_does_not_trigger_cleanup_errors(project, tmp_path, sys_
 def test_manifest_on_disk_carries_the_source_block(project, tmp_path, sys_tmp):
     audit = scan(project, tmp_path).audit_dir
     manifest = json.loads((audit / "manifest.json").read_text("utf-8"))
-    assert manifest["source"]["retained"] is True and "source" in manifest["source"]["path"]
+    assert manifest["source"]["retained_at_scan"] is True and "source" in manifest["source"]["path"]
 
 
 # ---------------------------------------------------------------- audit delete

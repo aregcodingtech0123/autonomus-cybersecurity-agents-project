@@ -172,7 +172,8 @@ def build_manifest(
         "workspace_policy_files": [SEMGREPIGNORE_NAME],
         "source": source_info
         or {
-            "retained": False,
+            "retained_at_scan": False,
+            "committed": False,
             "path": None,
             "injected_files": [SEMGREPIGNORE_NAME],
             "restricted_to_owner": False,
@@ -199,7 +200,12 @@ def _retain_source(workspace: Path, audit_dir: Path) -> dict:
     shutil.copytree(workspace, destination, copy_function=shutil.copyfile, symlinks=False)
     restricted = restrict_to_owner(audit_dir)  # before read-only: children are re-evaluated by NTFS
     make_tree_readonly(destination)
-    return {"retained": True, "path": "source", "restricted_to_owner": restricted}
+    return {
+        "retained_at_scan": True,
+        "committed": False,
+        "path": "source",
+        "restricted_to_owner": restricted,
+    }
 
 
 def run_scan(
@@ -281,7 +287,8 @@ def run_scan(
                     )
                 )
         source_info = {
-            "retained": False,
+            "retained_at_scan": False,
+            "committed": False,
             "path": None,
             "injected_files": [SEMGREPIGNORE_NAME],
             "restricted_to_owner": False,

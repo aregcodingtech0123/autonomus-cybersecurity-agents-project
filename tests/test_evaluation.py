@@ -352,7 +352,7 @@ def test_cli_normalize_writes_a_secret_free_findings_json(tmp_path, capsys):
     assert code == 0 and "25 findings from 46 raw results" in capsys.readouterr().out
     text = (audit_dir / "findings.json").read_text("utf-8")
     doc = json.loads(text)
-    assert doc["schema_version"] == "1" and len(doc["findings"]) == 25
+    assert doc["schema_version"] == "2" and len(doc["findings"]) == 25
     assert all(s not in text for s in PLANTED)
     assert doc["findings"][0]["snippet"] is None, (
         "no retained source/ in this audit: no snippets, and it says so"

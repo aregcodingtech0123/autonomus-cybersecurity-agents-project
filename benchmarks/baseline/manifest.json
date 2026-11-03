@@ -18,7 +18,8 @@
     ".semgrepignore"
   ],
   "source": {
-    "retained": true,
+    "retained_at_scan": true,
+    "committed": false,
     "path": "source",
     "injected_files": [
       ".semgrepignore"

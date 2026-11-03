@@ -1,6 +1,6 @@
 # Phase 1 adversarial review (verbatim record)
 
-Independent adversarial review of the Phase 1 scanner engine, performed against commit `4bba2a4`.
+Independent adversarial review of the Phase 1 scanner engine, performed against commit `166f54a`.
 Environment: Windows 11 build 26200, Docker 29.9.2. Findings marked CONFIRMED were reproduced; the two
 Linux-specific findings were reproduced inside a Linux container simulating separate host and container
 users. The review changed no code. Remediation status lives in `phase1-remediation.md`.

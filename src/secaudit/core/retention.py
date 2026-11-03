@@ -61,7 +61,8 @@ def restrict_to_owner(path: Path) -> bool:
         return False
     try:
         if os.name == "posix":
-            os.chmod(path, 0o700)
+            # A directory needs the search bit, a file must not get an execute bit it never had.
+            os.chmod(path, 0o700 if path.is_dir() else 0o600)
             return True
         sid = _current_sid()
         if sid is None:

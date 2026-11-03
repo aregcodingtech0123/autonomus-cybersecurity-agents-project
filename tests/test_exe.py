@@ -128,10 +128,16 @@ def test_windows_only_exe_and_com_extensions(exe_mod, tmp_path):
         exe_mod.resolve("tool", path_env=path_env(tmp_path / "bin"), cwd=tmp_path)
 
 
-@pytest.mark.skipif(not IS_WINDOWS, reason="taskkill is Windows-only")
-def test_taskkill_comes_from_system32(exe_mod):
-    expected = os.path.join(os.environ["SystemRoot"], "System32", "taskkill.exe")
-    assert os.path.normcase(exe_mod.resolve("taskkill")) == os.path.normcase(expected)
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows system tools are Windows-only")
+@pytest.mark.parametrize("tool", ["taskkill", "icacls", "whoami"])
+def test_windows_system_tools_come_from_system32(exe_mod, tool, tmp_path):
+    expected = os.path.join(os.environ["SystemRoot"], "System32", tool + ".exe")
+    # even when an MSYS-style lookalike earlier on PATH would win (Git for Windows ships /usr/bin/whoami)
+    lookalike = tmp_path / "usr_bin"
+    lookalike.mkdir()
+    (lookalike / f"{tool}.exe").write_bytes(b"MZ\x00")
+    got = exe_mod.resolve(tool, path_env=str(lookalike) + os.pathsep + os.environ["PATH"])
+    assert os.path.normcase(got) == os.path.normcase(expected)
 
 
 # ---------------------------------------------------------------- guard: no bare subprocess use

@@ -24,6 +24,7 @@ from secaudit.core import evaluation, exe
 from secaudit.core.executors import reap_stale_containers
 from secaudit.core.intake import DEFAULT_LIMITS, CleanupError, IntakeError
 from secaudit.core.normalize.pipeline import export_json, normalize_audit, normalize_audit_dir
+from secaudit.core.retention import AuditNotFoundError, delete_audit
 from secaudit.core.rules import DEFAULT_RULESETS, RulesError, update_rules
 from secaudit.core.sandbox import ResourceLimits, docker_available
 from secaudit.core.scan import ScanEnvironmentError, ScanOptions, run_scan
@@ -109,6 +110,8 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--runner", choices=("docker", "native"), default="docker")
     scan.add_argument("--i-trust-this-code", action="store_true",
                       help="required for --runner native (no isolation)")  # fmt: skip
+    scan.add_argument("--no-keep-source", action="store_true",
+                      help="do not keep the sanitized source copy")  # fmt: skip
     scan.add_argument("--include-git", action="store_true", help="copy .git from a local directory")
     scan.add_argument("--rules-dir", type=Path, default=None, help="Semgrep rules cache directory")
     scan.add_argument("--allow-git-host", action="append", default=[], metavar="HOST",
@@ -135,6 +138,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="p/NAME",
         help="ruleset to fetch (repeatable; default: " + " ".join(DEFAULT_RULESETS) + ")",
     )
+    audit = sub.add_parser("audit", parents=[debug_parent], help="manage stored audits")
+    audit_sub = audit.add_subparsers(dest="audit_command", required=True)
+    delete = audit_sub.add_parser(
+        "delete", help="delete an audit directory (including read-only source)"
+    )
+    delete.add_argument("audit_id", help="e.g. 20261102T233334Z-15f810f2")
+    delete.add_argument(
+        "--out", type=Path, default=Path("audits"), help="output root (default: ./audits)"
+    )
+
     norm = sub.add_parser(
         "normalize",
         parents=[debug_parent],
@@ -158,6 +171,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ev.add_argument("--out-dir", type=Path, default=None, help="default: the parent of --from-raw")
     return parser
+
+
+def _cmd_audit_delete(args: argparse.Namespace) -> int:
+    try:
+        delete_audit(args.out, args.audit_id)
+    except AuditNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except CleanupError as exc:
+        print(f"cleanup failed, delete these leftovers manually: {exc}", file=sys.stderr)
+        return EXIT_CLEANUP
+    print(f"deleted audit {args.audit_id}")
+    return EXIT_OK
 
 
 def _cmd_normalize(args: argparse.Namespace) -> int:
@@ -243,6 +269,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         runner=args.runner,
         limits=limits,
         include_git=args.include_git,
+        keep_source=not args.no_keep_source,
         rules_dir=args.rules_dir,
         resource_limits=ResourceLimits(timeout_s=args.timeout),
     )
@@ -264,6 +291,18 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         extra = f" ({tool['detail']})" if tool["detail"] else ""
         print(
             f"  {name:10} {tool['status']:9} exit={tool['exit_code']}  {tool['duration_s']}s{extra}"
+        )
+    source = manifest.get("source") or {}
+    if source.get("retained"):
+        where = f"{outcome.audit_dir.as_posix()}/{source.get('path', 'source')}"
+        access = (
+            "owner-only access"
+            if source.get("restricted_to_owner")
+            else "access NOT restricted on this OS/filesystem"
+        )
+        print(
+            f"source retained at {where} ({access}); it may contain secrets - "
+            f"remove with: secaudit audit delete {manifest['audit_id']}"
         )
     return EXIT_OK if outcome.tools_ok else EXIT_TOOLS
 
@@ -335,6 +374,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_build_images(args)
         if args.command == "rules":
             return _cmd_rules_update(args)
+        if args.command == "audit":
+            return _cmd_audit_delete(args)
         if args.command == "normalize":
             return _cmd_normalize(args)
         if args.command == "eval":

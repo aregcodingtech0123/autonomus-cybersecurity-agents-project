@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import uuid
@@ -33,6 +34,7 @@ from secaudit.core.intake import (
     remove_tree,
 )
 from secaudit.core.neutralize import neutralize_workspace
+from secaudit.core.retention import make_tree_readonly, restrict_to_owner
 from secaudit.core.rules import RulesCache, RulesError, load_rules_cache
 from secaudit.core.sandbox import ResourceLimits, docker_available, kill_container
 from secaudit.core.scanners import (
@@ -62,6 +64,7 @@ class ScanOptions:
     rules_dir: Path | None = None
     resource_limits: ResourceLimits = ResourceLimits()
     docker: str = "docker"
+    keep_source: bool = True  # retain the sanitized workspace as <audit>/source/
 
 
 @dataclass
@@ -112,6 +115,7 @@ def build_manifest(
     results: list[RawScanResult],
     audit_dir: Path,
     neutralized_files: list[str] | None = None,
+    source_info: dict | None = None,
 ) -> dict:
     """Assemble manifest.json content. All paths are POSIX-style and relative to the audit dir."""
     tools: dict[str, dict] = {}
@@ -164,6 +168,13 @@ def build_manifest(
             "skipped_entries": list(intake_result.skipped),
         },
         "workspace_policy_files": [SEMGREPIGNORE_NAME],
+        "source": source_info
+        or {
+            "retained": False,
+            "path": None,
+            "injected_files": [SEMGREPIGNORE_NAME],
+            "restricted_to_owner": False,
+        },
         "neutralized_files": list(neutralized_files or []),
         "tool_order": [r.tool for r in results],
         "tools": tools,
@@ -173,6 +184,20 @@ def build_manifest(
             "failed": sum(r.status in ("failed", "timeout") for r in results),
         },
     }
+
+
+def _retain_source(workspace: Path, audit_dir: Path) -> dict:
+    """Copy the sanitized workspace into the audit directory, read-only and owner-only.
+
+    COPY, not move: a rename keeps the files' old inherited ACLs (on Windows they would keep the
+    old parent's broader access), whereas files created under the restricted audit directory inherit
+    its ACL. The temp root, including the original workspace, is deleted by the caller afterwards.
+    """
+    destination = audit_dir / "source"
+    shutil.copytree(workspace, destination, copy_function=shutil.copyfile, symlinks=False)
+    restricted = restrict_to_owner(audit_dir)  # before read-only: children are re-evaluated by NTFS
+    make_tree_readonly(destination)
+    return {"retained": True, "path": "source", "restricted_to_owner": restricted}
 
 
 def run_scan(
@@ -253,6 +278,14 @@ def run_scan(
                         extra={"limitations": list(adapter.limitations)},
                     )
                 )
+        source_info = {
+            "retained": False,
+            "path": None,
+            "injected_files": [SEMGREPIGNORE_NAME],
+            "restricted_to_owner": False,
+        }
+        if options.keep_source:
+            source_info.update(_retain_source(intake_result.workspace, audit_dir))
         manifest = build_manifest(
             audit_id=audit_id,
             started_at=started_at,
@@ -263,6 +296,7 @@ def run_scan(
             results=results,
             audit_dir=audit_dir,
             neutralized_files=neutralized_files,
+            source_info=source_info,
         )
         (audit_dir / "manifest.json").write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n"

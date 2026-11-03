@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import subprocess
 
+WINDOWS_SYSTEM_TOOLS = frozenset({"taskkill", "icacls", "whoami"})
 _WINDOWS_EXTENSIONS = (".exe", ".com")  # never .bat/.cmd: they run through cmd.exe
 _cache: dict[tuple, str] = {}
 _untrusted: list[str] = []
@@ -76,9 +77,12 @@ def resolve(
     if key in _cache:
         return _cache[key]
 
-    if os.name == "nt" and name.lower() in ("taskkill", "taskkill.exe"):
+    stem = name.lower().removesuffix(".exe")
+    if os.name == "nt" and stem in WINDOWS_SYSTEM_TOOLS:
+        # Git for Windows puts MSYS tools (/usr/bin/whoami, ...) on PATH ahead of System32 and
+        # their options differ, so Windows' own tools always come from System32.
         root = os.environ.get("SystemRoot") or os.environ.get("SYSTEMROOT") or r"C:\Windows"
-        fixed = os.path.join(root, "System32", "taskkill.exe")
+        fixed = os.path.join(root, "System32", stem + ".exe")
         if os.path.isfile(fixed):
             _cache[key] = fixed
             return fixed

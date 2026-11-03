@@ -85,8 +85,23 @@ Every rejection raises `IntakeError` with a stable reason code. Defaults (all co
   hardcoded passwords and keys found in the scanned code (verified: `tests/test_docker_integration.py::
   test_secret_literals_appear_only_in_documented_raw_files`). Treat the whole audit directory as sensitive.
   On POSIX the audit directory and `raw/` are created `0700` and raw files and `manifest.json` `0600`
-  (permissions only; raw bytes stay byte-identical so the manifest SHA-256 remains valid). On Windows no
-  permission hardening is applied (no portable stdlib equivalent; **unverified/not done**).
+  (permissions only; raw bytes stay byte-identical so the manifest SHA-256 remains valid). On Windows the
+  audit directory is restricted to the current user with `icacls` (user SID, inheritance removed; verified by
+  reading back the SDDL in `tests/test_source_retention.py`). Administrators and SYSTEM can still take
+  ownership. `manifest.json` records `source.restricted_to_owner`; if it is false (restriction failed) the
+  CLI says so.
+- **Retained source (Phase 2A).** `secaudit scan` keeps the sanitized workspace as `<audit>/source/`
+  (read-only; `--no-keep-source` disables it) because triage and patch validation need the code. It is the
+  neutralized copy the scanners saw (policy files removed, `.semgrepignore` injected), **not** the user's
+  original. It can contain secrets (that is what is being audited), so every scan prints one notice with its
+  location and how to remove it: `secaudit audit delete <audit_id>` (validates the id, refuses directories
+  without `manifest.json`, removes read-only trees on every OS). Temp directories are still always cleaned
+  and cleanup still fails loudly; the retained directory is outside the temp root by design. It is
+  *copied* (not moved) into place: a rename would keep the files' old, broader Windows ACLs.
+- **Derived data is secret-free (Phase 2A).** `findings.json`, snippets and metrics are masked: Gitleaks-flagged
+  lines are replaced, secret shapes and sensitive assignments are redacted, and tool **messages** are masked
+  too (Bandit's B105 message embeds the literal). Snippets come from the retained source, never from SARIF.
+  Tests grep every derived output for the planted fake secrets; raw files are exempt.
   Only `manifest.json` and CLI summaries are guaranteed secret-free (no host paths, no secret values).
   Masking of any *derived* data (findings, evidence snippets, anything shown to an LLM) happens in Phase 2.
 - The temporary workspace is deleted after every run, including failures and timeouts.

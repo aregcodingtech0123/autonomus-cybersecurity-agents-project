@@ -67,3 +67,24 @@ One record per decision that is expensive to reverse or easy to forget the reaso
     pinned hashes are stale. Only HEAD is required to be consistent and green.
 - **Enforced by:** `tests/test_no_secret_literals.py` scans every tracked file with **no allowlist**.
 - **Related:** `docs/SECURITY_POLICY.md` section 7, `benchmarks/baseline/DISCOVERY.md` Addendum 5.
+
+## ADR-003: Benchmark labels may be unscored, and corrected labels get a new tag
+
+- **Status:** accepted (2026-11-05), before any scanner ran on the Phase 2C-A targets
+- **Context:** a human review found labels that neither "positive" nor "negative" describes correctly. An
+  unpinned requirement (P39) is not a demonstrated vulnerability. `tarfile` with `filter="data"` (N23) has a
+  known bypass on Windows with no fix in any 3.13 release, while P35 needs a version below 3.14, so no
+  `requires-python` range makes N23 safe on every allowed interpreter. The tag `bench-v2-preregistered` was
+  already on `origin` when the review began.
+- **Decision:**
+  - A new kind, `unscored`, is excluded from all metrics. The case keeps its id and records
+    `unscored_reason` and `pipeline_expectation`.
+  - The published tag stays where it is. The corrected labels are registered by a new tag,
+    `bench-v2.1-preregistered`.
+- **Consequences:**
+  - The expansion scores 28 positives and 20 negatives, plus 2 unscored cases.
+  - `git diff` between the two tags shows every correction, with reasons in `benchmarks/LABEL_REVIEW.md`.
+  - `benchmarks/check_ground_truth.py` ties N23 to `interpreter_evidence`, so it must return to negative once
+    every recorded fix has a released version.
+- **Enforced by:** `benchmarks/check_ground_truth.py`, `tests/test_benchmark_expansion.py`,
+  `tests/test_evaluation.py`.

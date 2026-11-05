@@ -1,0 +1,17 @@
+{
+  "README.md": "1eed6e4cc06419377312df936a0bd96fcafe318fd83c192ff98589781e7e9650",
+  "config/settings.ini": "c3a8a6a495229a979b63bcc7cf5ec1b3a2cbfa80890b1f4592123fd9e1844eb7",
+  "dev_server.py": "9f290c0d0c2bf6a5575026eb02e3d9895007cc04dc80fc208d2e57d61f1cc83b",
+  "requirements.txt": "79fed25b3bcdabbfe5111232c95a76572b91d1d5dc17c14dfa4561350118e9ed",
+  "tests/conftest.py": "611428910e8d48ea344107fdd5e9d1177814233d6e8a8f58194af6c07ade218c",
+  "tests/test_auth.py": "742471663d84a7ffb9bf04d3f8ea21c6b133c8f4728de7a149a7e7c0e41a3d6c",
+  "webshop/__init__.py": "cd8c148ca384ce08232872bdfabffb57fc8b2f820e543bd1659bc7ce6060857e",
+  "webshop/auth.py": "440c4a25e973389f09d957e3a44b1a058c0c91aff0b9c0817a10e6560aa9fd70",
+  "webshop/cache.py": "3104da63f7c85b3b904c861fe73f065c725e31313c582646d7904675fa08fc42",
+  "webshop/db.py": "5376329fd231c6b8e099201b6dbdf653795cb644b51a853412dc548c443aee1f",
+  "webshop/files.py": "bcc3f06087bdbc7869a88f5237ba542c3fc0a5255f3631a97628766dc5d3e4e6",
+  "webshop/serialization.py": "eb079072340be77b186d6c92bd2ab442f4b530a0f95886babce7ffa92df68451",
+  "webshop/settings.py": "25f7067967f8289973382ac979f772dbfa30d3af2bcc39575207536aae1cfe2a",
+  "webshop/system.py": "901b259e5f6dc7f84809cc7dfce523465543a2b392649c2617947e46eb57044c",
+  "wsgi.py": "c6bfe49b228f0da43150e3f8108e7b51bee98597024f724624b591a9da92b409"
+}

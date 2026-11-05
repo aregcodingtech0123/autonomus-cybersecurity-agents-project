@@ -18,7 +18,7 @@ BENCH_DIR = Path(__file__).resolve().parent
 EXPANSION = BENCH_DIR / "expected_findings_expansion.yaml"
 OUTPUT = BENCH_DIR / "CASES.md"
 
-KIND_ORDER = ("positive", "negative", "injection_bait", "masking_probe")
+KIND_ORDER = ("positive", "negative", "injection_bait", "masking_probe", "unscored")
 HEADER = (
     "| ID | Kind | Title | File:lines | CWE | Exposure | "
     "Prior detectability (sast / secrets / sca) |\n"
@@ -54,7 +54,8 @@ def render(doc: dict) -> str:
         "`benchmarks/expected_findings_expansion.yaml`. Do not edit by hand.\n\n"
         "The `Prior detectability` column is the prediction registered before any scanner ran on "
         "these targets. The original cases of `vuln_python_app` are in "
-        "`benchmarks/expected_findings.yaml`.\n"
+        "`benchmarks/expected_findings.yaml`. `unscored` cases are excluded from all metrics; "
+        "`benchmarks/LABEL_REVIEW.md` lists the corrections made before any scan.\n"
     ]
     for target in sorted({case["target"] for case in cases}):
         rows = sorted((c for c in cases if c["target"] == target), key=_sort_key)

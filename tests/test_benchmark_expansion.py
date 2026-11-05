@@ -253,3 +253,171 @@ def test_checker_rejects_low_confidence_without_a_doubt(checker, doc, tmp_path):
 def test_checker_rejects_a_dependency_positive_without_advisories(checker, doc, tmp_path):
     path = _mutated(tmp_path, doc, "P18", advisories=None)
     assert any("P18: dependency positive" in p for p in checker.check_expansion(path))
+
+
+# ---------------------------------------------------------------- the label review
+
+
+def _case(doc: dict, cid: str) -> dict:
+    return next(c for c in doc["cases"] if c["id"] == cid)
+
+
+def _with_evidence(tmp_path: Path, doc: dict, **changes) -> Path:
+    copy = json.loads(json.dumps(doc))
+    copy["interpreter_evidence"].update(changes)
+    path = tmp_path / "expansion.yaml"
+    path.write_text(yaml.safe_dump(copy, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def test_unscored_cases_keep_their_ids_and_carry_no_match(doc):
+    unscored = {c["id"]: c for c in doc["cases"] if c["kind"] == "unscored"}
+    assert sorted(unscored) == ["N23", "P39"]
+    for case in unscored.values():
+        assert "match" not in case
+        assert case["unscored_reason"].strip() and case["pipeline_expectation"].strip()
+    assert "unresolved" in unscored["P39"]["pipeline_expectation"]
+    assert "CVE-2026-107784" in unscored["N23"]["unscored_reason"]
+
+
+@pytest.mark.parametrize("field", ["unscored_reason", "pipeline_expectation"])
+def test_checker_rejects_unscored_without_its_fields(checker, doc, tmp_path, field):
+    path = _mutated(tmp_path, doc, "P39", **{field: None})
+    assert any(f"P39: unscored without {field}" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_unscored_with_a_match(checker, doc, tmp_path):
+    entry = {"file": "requirements.txt", "line_start": 4, "line_end": 4, "classes": ["vuln:*"]}
+    path = _mutated(tmp_path, doc, "P39", match=[entry])
+    assert any("P39: unscored must not have match" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_unscored_fields_on_a_scored_case(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "P12", unscored_reason="not really")
+    assert any("P12: unscored_reason and" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_an_unscored_case_with_a_bait_prefix(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "I03", kind="unscored")
+    assert any("unscored: id prefix" in p for p in checker.check_expansion(path))
+
+
+def test_expected_miss_reasons_match_the_review(doc):
+    reasons = {
+        c["id"]: c["expected_miss_reason"] for c in doc["cases"] if "expected_miss_reason" in c
+    }
+    expected = {f"P{i}": "tool_blind" for i in range(20, 25)}
+    assert reasons == {**expected, "P16": "no_rule", "P38": "pipeline_gap"}
+
+
+def test_checker_requires_a_miss_reason_on_an_all_no_positive(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "P16", expected_miss_reason=None)
+    assert any("P16: positive with an all-no prior" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_an_unknown_miss_reason(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "P16", expected_miss_reason="unlucky")
+    assert any("P16: expected_miss_reason 'unlucky'" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_a_miss_reason_on_a_detectable_positive(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "P12", expected_miss_reason="no_rule")
+    assert any("P12: expected_miss_reason is only" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_a_miss_reason_that_contradicts_tool_blind(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "P20", expected_miss_reason="no_rule")
+    assert any("P20: expected_miss_reason tool_blind" in p for p in checker.check_expansion(path))
+
+
+@pytest.mark.parametrize("cid", ["P18", "P19", "P32", "P38", "P39"])
+def test_every_sca_case_states_its_reachability(doc, cid):
+    assert _case(doc, cid)["context"]["reachability"] in {"not reachable", "not verified"}
+
+
+def test_checker_rejects_an_sca_case_with_a_bad_reachability(checker, doc, tmp_path):
+    context = dict(_case(doc, "P38")["context"], reachability="maybe")
+    path = _mutated(tmp_path, doc, "P38", context=context)
+    assert any("P38: invalid context.reachability" in p for p in checker.check_expansion(path))
+
+
+def test_scoring_note_text_is_the_agreed_one(doc, checker):
+    for cid in sorted(checker.SCORING_NOTE_CASES):
+        assert _case(doc, cid)["scoring_note"] == checker.SCORING_NOTE
+
+
+def test_checker_requires_the_scoring_note(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "P32", scoring_note=None)
+    assert any("P32: missing scoring_note" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_a_changed_scoring_note(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "P32", scoring_note="counts only when exploitable")
+    assert any("P32: scoring_note differs" in p for p in checker.check_expansion(path))
+
+
+def test_p32_records_advisories_for_each_pin_and_keeps_both_lines(doc):
+    case = _case(doc, "P32")
+    by_package = {}
+    for advisory in case["advisories"]:
+        by_package.setdefault(advisory["package"], []).append(advisory["id"])
+    assert by_package["Flask"] == ["GHSA-68rp-wp8r-4726"]
+    assert len(by_package["Werkzeug"]) == 10
+    assert (case["line_start"], case["line_end"]) == (2, 3)
+
+
+@pytest.mark.parametrize("cid", ["P31", "P34", "P36", "P38", "P40"])
+def test_review_kept_the_label_and_added_the_assumptions(doc, cid):
+    case = _case(doc, cid)
+    assert case["kind"] == "positive" and case["confidence_in_label"] == "medium"
+    assert "Exploitability assumptions:" in " ".join(case["rationale"].split())
+
+
+def test_negative_rationales_name_their_enforcing_lines(doc):
+    assert "no code execution; DoS risk bounded by the cap" in _case(doc, "N22")["rationale"]
+    assert all(f"Line {n}" in _case(doc, "N26")["rationale"] for n in (26, 30, 31))
+    assert all(f"ine {n}" in _case(doc, "N17")["rationale"] for n in (53, 61))
+    assert all(f"ine {n}" in _case(doc, "N18")["rationale"] for n in (32, 33))
+
+
+def test_n26_really_has_an_allow_list_and_a_bound_value(doc):
+    lines = (
+        (TARGETS / "ops_toolbox" / "toolbox" / "report.py").read_text(encoding="utf-8").splitlines()
+    )
+    assert lines[25].startswith("_REPORT_TABLES = {")
+    assert lines[29].strip().startswith("table = _REPORT_TABLES[kind]")
+    assert "WHERE total >= ?" in lines[30] and "(min_total,)" in lines[30]
+
+
+def test_interpreter_range_matches_the_target(doc):
+    assert doc["interpreter_evidence"]["required_range"] == ">=3.13.18,<3.14"
+    for cid in ("P35", "N23"):
+        assert ">=3.13.18,<3.14" in _case(doc, cid)["context"]["notes"]
+        assert ">=3.13.18,<3.14" in _case(doc, cid)["rationale"]
+
+
+def test_checker_rejects_a_range_that_differs_from_the_target(checker, doc, tmp_path):
+    path = _with_evidence(tmp_path, doc, required_range=">=3.13.16,<3.14")
+    assert any("pyproject.toml declares" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_a_range_that_allows_the_new_default(checker, doc, tmp_path):
+    path = _with_evidence(tmp_path, doc, required_range=">=3.13.18,<3.15")
+    assert any("breaks P35" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_a_floor_below_a_recorded_fix(checker, doc, tmp_path):
+    fixes = [*doc["interpreter_evidence"]["fixes"], {"cve": "CVE-X", "fixed_3_13": "3.13.19"}]
+    path = _with_evidence(tmp_path, doc, fixes=fixes)
+    assert any("floor is below the CVE-X fix" in p for p in checker.check_expansion(path))
+
+
+def test_checker_rejects_n23_as_negative_while_a_fix_is_missing(checker, doc, tmp_path):
+    path = _mutated(tmp_path, doc, "N23", kind="negative")
+    assert any("N23 must be unscored" in p for p in checker.check_expansion(path))
+
+
+def test_checker_asks_to_restore_n23_once_every_fix_is_released(checker, doc, tmp_path):
+    fixes = [f for f in doc["interpreter_evidence"]["fixes"] if f["fixed_3_13"] is not None]
+    path = _with_evidence(tmp_path, doc, fixes=fixes)
+    assert any("N23 must be negative" in p for p in checker.check_expansion(path))

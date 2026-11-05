@@ -26,15 +26,15 @@ def shard_for(customer_id: str, shards: int = 16) -> int:
 _REPORT_TABLES = {"daily": "report_daily", "weekly": "report_weekly"}
 
 
-def load_rows(connection: sqlite3.Connection, kind: str) -> list:
+def load_rows(connection: sqlite3.Connection, kind: str, min_total: int = 0) -> list:
     table = _REPORT_TABLES[kind]  # any other value raises KeyError before a query exists
-    return connection.execute(f"SELECT name, total FROM {table}").fetchall()
+    return connection.execute(f"SELECT name, total FROM {table} WHERE total >= ?", (min_total,)).fetchall()
 
 
 def render_report(kind: str, database: str, raw_options: str) -> str:
     options = parse_options(raw_options)
     connection = sqlite3.connect(database)
-    rows = load_rows(connection, kind)
+    rows = load_rows(connection, kind, int(options.get("min_total", 0)))
     connection.close()
     limit = int(options.get("limit", len(rows)))
     return "\n".join(f"{name}: {total}" for name, total in rows[:limit])

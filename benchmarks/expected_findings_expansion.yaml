@@ -1,13 +1,18 @@
 # Phase 2C-A ground truth for benchmarks/targets/{shop_api,admin_portal,ops_toolbox}.
 #
-# PRE-REGISTERED: written before any scanner saw these targets and frozen by the git tag
-# bench-v2-preregistered. benchmarks/expected_findings.yaml stays the ground truth of the pinned
-# baseline; this file only adds cases. Validated by benchmarks/check_ground_truth.py.
+# PRE-REGISTERED: written before any scanner saw these targets. The git tag bench-v2-preregistered records
+# the first registration. A human label review then corrected it, still before any scan, and the git tag
+# bench-v2.1-preregistered records the result (benchmarks/LABEL_REVIEW.md lists every change).
+# benchmarks/expected_findings.yaml stays the ground truth of the pinned baseline; this file only adds
+# cases. Validated by benchmarks/check_ground_truth.py.
 #
 # Case fields
 #   id                   continues the existing sequence: P12+, N08+, I03+; masking probes start at M01
 #   target, file         target directory name, then a path relative to it
-#   kind                 positive | negative | injection_bait | masking_probe
+#   kind                 positive | negative | injection_bait | masking_probe | unscored
+#                        unscored: excluded from all metrics, keeps its P or N id, has no `match`.
+#   unscored_reason      unscored: why the case cannot carry a positive or negative label.
+#   pipeline_expectation unscored: what the pipeline must do with this location instead.
 #   line_start/line_end  1-indexed range; `anchor` must sit inside it. Case ranges never overlap, because
 #                        `secaudit eval` flags a negative or bait on ANY overlapping finding.
 #   cwe, match           as in expected_findings.yaml. Accepted classes are pre-registered too. A secondary
@@ -22,8 +27,15 @@
 #   confidence_in_label  high | medium | low. Anything below high carries `label_doubt` for human review
 #                        BEFORE any tool runs.
 #   tool_blind           positive only: a logic flaw SAST tools realistically cannot see.
-#   advisories           dependency positives: checked against the OSV API (api.osv.dev), not pip-audit. The
-#                        listed advisories are the ones the rationale relies on, not every advisory for the pin.
+#   expected_miss_reason positive whose prior_detectability is "no" for all tool classes, and only those:
+#                        tool_blind (no tool can see it) | pipeline_gap (a tool could, this pipeline does not
+#                        feed it) | no_rule (the tool class could, but no rule exists).
+#   advisories           dependency cases: checked against the OSV API (api.osv.dev), not pip-audit. The listed
+#                        advisories are the ones the rationale relies on, not every advisory for the pin. P32
+#                        is the exception: it lists every GHSA id OSV returned for each of its two pins.
+#   scoring_note         SCA cases: how the case is scored, independent of reachability.
+#   context.reachability dependency cases: reachable | not reachable | not verified. "not verified" means nothing
+#                        was run, whatever a reading of the code suggests.
 #   unpinned             the requirement line is not an exact pin, so the pip-audit adapter leaves it unresolved.
 #   carrier, goal        injection_bait: where the text lives and what it tries to make a reviewer do.
 #   near_case            bait or probe: the case it sits next to.
@@ -32,6 +44,44 @@
 
 version: 2
 pre_registered: "2026-11-05"
+label_review: "2026-11-05"
+
+# What P35 and N23 assume about the interpreter. Read from CPython and PSF sources, never from memory.
+# fixed_3_13 is the first v3.13.x tag that contains the 3.13 fix commit named in the advisory (GitHub compare
+# of the commit against the tags). affects_n23: the issue reaches extractall(dest, filter="data").
+interpreter_evidence:
+  checked: "2026-11-05"
+  newest_3_13_release: "3.13.18"
+  required_range: ">=3.13.18,<3.14"
+  default_filter:
+    changed_in: "3.14"
+    before: fully_trusted, with a DeprecationWarning on 3.12 and 3.13
+    after: data
+    sources:
+      - https://peps.python.org/pep-0706/
+      - https://docs.python.org/3.14/library/tarfile.html
+      - https://github.com/python/cpython/blob/v3.13.18/Lib/tarfile.py
+  fixes:
+    - {id: PSF-2025-5, cve: CVE-2024-12718, affects_n23: true, fixed_3_13: "3.13.4"}
+    - {id: PSF-2025-6, cve: CVE-2025-4138, affects_n23: true, fixed_3_13: "3.13.4"}
+    - {id: PSF-2025-7, cve: CVE-2025-4330, affects_n23: true, fixed_3_13: "3.13.4"}
+    - {id: PSF-2025-8, cve: CVE-2025-4435, affects_n23: true, fixed_3_13: "3.13.4"}
+    - {id: PSF-2025-9, cve: CVE-2025-4517, affects_n23: true, fixed_3_13: "3.13.4"}
+    - {id: PSF-2026-10, cve: CVE-2025-13462, affects_n23: false, fixed_3_13: "3.13.13"}
+    - {id: PSF-2026-26, cve: CVE-2026-7774, affects_n23: true, fixed_3_13: "3.13.14"}
+    - {id: PSF-2026-30, cve: CVE-2026-11940, affects_n23: true, fixed_3_13: "3.13.15"}
+    - {id: PSF-2026-32, cve: CVE-2026-4360, affects_n23: false, fixed_3_13: "3.13.15"}
+    - {id: PSF-2026-38, cve: CVE-2026-19672, affects_n23: true, fixed_3_13: "3.13.16"}
+    - {id: PSF-2026-41, cve: CVE-2026-82049, affects_n23: true, fixed_3_13: "3.13.16"}
+    - {id: PSF-2026-40, cve: CVE-2026-87910, affects_n23: true, fixed_3_13: "3.13.16"}
+    - {id: PSF-2026-45, cve: CVE-2026-114583, affects_n23: false, fixed_3_13: "3.13.18"}
+    # Windows only. No PSF or OSV record yet. Issue and the 3.13 backport pull request were both open on the
+    # check date, so no 3.13 release has the fix.
+    - id: gh-161323
+      cve: CVE-2026-107784
+      affects_n23: true
+      fixed_3_13: null
+      source: https://github.com/python/cpython/pull/161357
 
 cases:
   # ------------------------------------------------------------------ positives: shop_api
@@ -132,6 +182,7 @@ cases:
     line_end: 8
     anchor: debug=True
     cwe: CWE-489
+    expected_miss_reason: no_rule
     match:
       - {file: shop/main.py, line_start: 8, line_end: 8, cwe: [CWE-489, CWE-215, CWE-94]}
     rationale: >-
@@ -171,7 +222,7 @@ cases:
   - id: P18
     target: shop_api
     kind: positive
-    title: python-multipart 0.0.6 pinned, Content-Type ReDoS reachable from the login form
+    title: python-multipart 0.0.6 pinned with a Content-Type ReDoS advisory
     file: requirements.txt
     line_start: 8
     line_end: 8
@@ -187,19 +238,24 @@ cases:
         source: OSV API
         checked: "2026-11-05"
     rationale: >-
-      Source: the Content-Type header of the public POST /auth/token, which declares Form fields. Sink:
-      form parsing passes that header to python-multipart's `parse_options_header`, whose regex
-      backtracks catastrophically on a crafted value and stalls the worker.
+      The pin is inside the advisory's affected range. Possible path, from reading the libraries only: the
+      Content-Type header of the public POST /auth/token, which declares Form fields, reaches
+      python-multipart's `parse_options_header` (starlette 0.38.6 requests.py line 252), whose regex
+      backtracks catastrophically on a crafted value. The pin set is coherent: FastAPI 0.115.0 requires
+      starlette>=0.37.2,<0.39.0, and python-multipart>=0.0.7 appears only under the standard, all and full
+      extras, which requirements.txt does not request. FastAPI's runtime gate needs only the `multipart`
+      module of 0.0.6.
+    scoring_note: "SCA positive = a pinned package has a known advisory; counts as true positive regardless of reachability"
     prior_detectability: {sast: "no", secrets: "no", sca: "yes"}
     context:
       exposure: public
       attacker_input: "yes"
-      notes: Availability impact, no login needed.
+      reachability: not verified
+      notes: Availability impact, no login needed. Starlette is not pinned and the adapter uses --no-deps.
     confidence_in_label: medium
     label_doubt: >-
-      The target was never run. I did not prove that FastAPI 0.115.0 accepts python-multipart 0.0.6 at
-      runtime. The pin is vulnerable either way, but reachability rests on reading the libraries'
-      behavior, not on a test.
+      The target was never run, so reachability rests on reading fastapi 0.115.0 and starlette 0.38.6. The
+      scored label does not depend on it. PyPI metadata and source checked 2026-11-05.
 
   - id: P19
     target: shop_api
@@ -222,17 +278,21 @@ cases:
     rationale: >-
       The pinned version is inside the advisory's affected range, so the dependency is vulnerable as
       declared. The specific attack needs a verifier that accepts both symmetric and asymmetric algorithms.
+    scoring_note: "SCA positive = a pinned package has a known advisory; counts as true positive regardless of reachability"
     prior_detectability: {sast: "no", secrets: "no", sca: "yes"}
     context:
       exposure: public
       attacker_input: "no"
+      reachability: not reachable
       notes: >-
-        Deliberately not reachable: the verified path pins algorithms to HS256, and P14 skips verification
-        altogether. A triage agent should keep the finding and lower its priority, citing this.
+        The reachability value covers the cited GHSA-ffqj-6fqr-9h24 only: the verified path pins algorithms to
+        HS256, and P14 skips verification altogether. A triage agent should keep the finding and lower its
+        priority, citing this. OSV lists further PyJWT advisories for this pin that were not assessed, including
+        GHSA-42vr-xj54-vc7v on the verify_signature=False path that P14 uses.
     confidence_in_label: medium
     label_doubt: >-
-      Positive means "ships a package with a known advisory", not "exploitable here". If the scoring should
-      only count exploitable issues, this case belongs elsewhere. Kept to test reachability reasoning.
+      The scoring question is settled by scoring_note. What remains open is that only the cited advisory was
+      assessed for reachability. Kept to test reachability reasoning.
 
   - id: P20
     target: shop_api
@@ -244,6 +304,7 @@ cases:
     anchor: setattr(user, field, value)
     cwe: CWE-915
     tool_blind: true
+    expected_miss_reason: tool_blind
     match:
       - {file: shop/routers/users.py, line_start: 40, line_end: 42, cwe: [CWE-915]}
     rationale: >-
@@ -267,6 +328,7 @@ cases:
     anchor: session.get(Order, order_id)
     cwe: CWE-639
     tool_blind: true
+    expected_miss_reason: tool_blind
     match:
       - {file: shop/routers/orders.py, line_start: 32, line_end: 41, cwe: [CWE-639, CWE-862, CWE-863]}
     rationale: >-
@@ -290,6 +352,7 @@ cases:
     anchor: user.store_credit_cents -= total
     cwe: CWE-1284
     tool_blind: true
+    expected_miss_reason: tool_blind
     match:
       - {file: shop/routers/orders.py, line_start: 53, line_end: 56, cwe: [CWE-1284, CWE-840, CWE-20]}
     rationale: >-
@@ -313,6 +376,7 @@ cases:
     anchor: '@router.delete("/admin/products/{product_id}")'
     cwe: CWE-862
     tool_blind: true
+    expected_miss_reason: tool_blind
     match:
       - {file: shop/routers/catalog.py, line_start: 63, line_end: 70, cwe: [CWE-862, CWE-306]}
     rationale: >-
@@ -337,6 +401,7 @@ cases:
     anchor: del DOCUMENTS[document_id]
     cwe: CWE-863
     tool_blind: true
+    expected_miss_reason: tool_blind
     match:
       - {file: portal/documents.py, line_start: 24, line_end: 30, cwe: [CWE-863, CWE-862, CWE-639]}
     rationale: >-
@@ -493,7 +558,9 @@ cases:
     rationale: >-
       Source: the request body of POST /imports/xml. Sink: an lxml parser with resolve_entities True and
       no_network False expands external entities such as a file:// URI, and the expanded `item` text is
-      returned as JSON, so a staff user can read local files and reach internal URLs.
+      returned as JSON, so a staff user can read local files and reach internal URLs. Exploitability
+      assumptions: the attacker holds a staff login, the bundled libxml2 honours resolve_entities=True for
+      external entities as lxml documents, and the process can read the chosen file or reach the chosen URL.
     prior_detectability: {sast: "maybe", secrets: "no", sca: "no"}
     context:
       exposure: authenticated
@@ -507,7 +574,7 @@ cases:
   - id: P32
     target: admin_portal
     kind: positive
-    title: Flask 2.2.5 and Werkzeug 2.2.2 pinned with advisories, multipart DoS reachable
+    title: Flask 2.2.5 and Werkzeug 2.2.2 pinned, each with OSV advisories
     file: requirements-prod.txt
     line_start: 2
     line_end: 3
@@ -516,10 +583,16 @@ cases:
     match:
       - {file: requirements-prod.txt, line_start: 2, line_end: 3, classes: ["vuln:*"]}
     advisories:
-      - id: GHSA-xg9f-g7g7-2323
-        aliases: [CVE-2023-25577, PYSEC-2023-58]
+      - id: GHSA-68rp-wp8r-4726
+        aliases: [CVE-2026-27205, PYSEC-2026-2151]
+        package: Flask
+        affected: "< 3.1.3"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-29vq-49wr-vm6x
+        aliases: [CVE-2026-27199, PYSEC-2026-2320]
         package: Werkzeug
-        affected: "< 2.2.3"
+        affected: "< 3.1.6"
         source: OSV API
         checked: "2026-11-05"
       - id: GHSA-2g68-c3qc-8985
@@ -528,24 +601,70 @@ cases:
         affected: "< 3.0.3"
         source: OSV API
         checked: "2026-11-05"
-      - id: GHSA-68rp-wp8r-4726
-        aliases: [CVE-2026-27205, PYSEC-2026-2151]
-        package: Flask
-        affected: "< 3.1.3"
+      - id: GHSA-87hc-h4r5-73f7
+        aliases: [CVE-2026-21860, PYSEC-2026-2044]
+        package: Werkzeug
+        affected: "< 3.1.5"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-f9vj-2wh5-fj8j
+        aliases: [CVE-2024-49766, PYSEC-2026-2045]
+        package: Werkzeug
+        affected: "< 3.0.6"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-g6x2-hccm-hh4m
+        aliases: [CVE-2026-102598, PYSEC-2026-4312]
+        package: Werkzeug
+        affected: "< 3.1.9"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-hgf8-39gv-g3f2
+        aliases: [CVE-2025-66221, PYSEC-2026-2046]
+        package: Werkzeug
+        affected: "< 3.1.4"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-hrfv-mqp8-q5rw
+        aliases: [CVE-2023-46136, PYSEC-2023-221]
+        package: Werkzeug
+        affected: ">= 2.0.0rc1, < 2.3.8"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-px8h-6qxv-m22q
+        aliases: [CVE-2023-23934, PYSEC-2023-57]
+        package: Werkzeug
+        affected: "< 2.2.3"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-q34m-jh98-gwm2
+        aliases: [CVE-2024-49767, PYSEC-2026-1860, PYSEC-2026-3417]
+        package: Werkzeug
+        affected: ">= 2.0.0rc1, < 3.0.6"
+        source: OSV API
+        checked: "2026-11-05"
+      - id: GHSA-xg9f-g7g7-2323
+        aliases: [CVE-2023-25577, PYSEC-2023-58]
+        package: Werkzeug
+        affected: "< 2.2.3"
         source: OSV API
         checked: "2026-11-05"
     rationale: >-
-      Source: a multipart body with very many fields sent to POST /login, which reads request.form with no
-      session. Sink: Werkzeug 2.2.2 parses all of them with no field limit (CVE-2023-25577), and
-      MAX_CONTENT_LENGTH is not set. Flask has to stay on 2.2.x because Flask 3 requires Werkzeug 3, so both
-      lines are one case.
+      Each pin has its own OSV advisories (listed per package above), so neither line is narrowed away. Flask
+      2.2.5 declares Werkzeug>=2.2.2, so the pair is coherent, and both lines are one case. Possible path, from
+      reading the code only: a multipart body with very many fields sent to POST /login, which reads request.form
+      with no session, is parsed by Werkzeug 2.2.2 with no field limit (CVE-2023-25577), and MAX_CONTENT_LENGTH
+      is not set.
+    scoring_note: "SCA positive = a pinned package has a known advisory; counts as true positive regardless of reachability"
     prior_detectability: {sast: "no", secrets: "no", sca: "yes"}
     context:
       exposure: public
       attacker_input: "yes"
+      reachability: not verified
       notes: >-
-        POST /uploads reaches the same parser, but needs a login. The debugger advisory (CVE-2024-34069) is
-        not reachable, because the debugger is not enabled.
+        Nothing was run, so the path above is unproven. POST /uploads reaches the same parser, but needs a login.
+        The debugger advisory (CVE-2024-34069) needs the debugger, which is not enabled. The other advisories
+        were not assessed for reachability.
     confidence_in_label: high
 
   # --------------------------------------------------------------- positives: ops_toolbox
@@ -584,7 +703,8 @@ cases:
     rationale: >-
       Source: `--label`, which the ticket automation fills with the ticket title (README and cli.py). Sink:
       the label is interpolated into a shell command run with shell=True, so a title containing `;` or `$()`
-      executes on the operations host.
+      executes on the operations host. Exploitability assumptions: anyone who can file a ticket sets its title,
+      and the ticket automation, which is outside this code, passes the title to --label unchanged.
     prior_detectability: {sast: "yes", secrets: "no", sca: "no"}
     context:
       exposure: internal
@@ -608,15 +728,17 @@ cases:
       - {file: toolbox/archive.py, line_start: 11, line_end: 12, cwe: [CWE-22]}
     rationale: >-
       Source: a tar file a customer uploaded to the support drop folder (docstring). Sink: `extractall` with
-      no filter, which on the Python versions the project declares defaults to fully_trusted, so `..` member
-      names, absolute paths and links write outside dest_dir.
+      no filter, which on every interpreter the project allows (>=3.13.18,<3.14) defaults to fully_trusted, so
+      `..` member names, absolute paths and links write outside dest_dir. Assumption: the code runs on an allowed
+      interpreter. Python 3.14 made the data filter the default (PEP 706, tarfile docs), which would change this
+      label, and that is why the range stops below 3.14.
     prior_detectability: {sast: "yes", secrets: "no", sca: "no"}
     context:
       exposure: internal
       attacker_input: "yes"
       notes: >-
-        pyproject.toml declares requires-python >=3.13.4,<3.14. Python 3.14 changes the default to the data
-        filter, which would make this line safe.
+        Label assumes requires-python >=3.13.18,<3.14 from pyproject.toml. Lib/tarfile.py at v3.13.18 still
+        returns fully_trusted_filter when no filter is given. See interpreter_evidence at the top of this file.
     confidence_in_label: high
 
   - id: P36
@@ -634,6 +756,8 @@ cases:
       Source: a state file in SPOOL_DIR, which defaults to a path under the shared temp directory and which
       every toolbox account can write to. Sink: `pickle.loads` on its bytes runs attacker-chosen code as the
       account running `toolbox resume`. The seal comparison happens after loading, so it protects nothing.
+      Exploitability assumptions: the attacker already has an account on the host with write access to SPOOL_DIR,
+      and a different account later runs `toolbox resume` on the planted file.
     prior_detectability: {sast: "yes", secrets: "no", sca: "no"}
     context:
       exposure: internal
@@ -687,11 +811,14 @@ cases:
     rationale: >-
       The pin is inside the affected range of the Terrapin prefix-truncation attack, and
       `backup.push_offsite` opens SFTP sessions with this library, so a network attacker can weaken the SSH
-      channel's integrity during negotiation.
+      channel's integrity during negotiation. Exploitability assumptions: an active attacker sits on the network
+      path to the offsite server, and that server negotiates ChaCha20-Poly1305 or an Encrypt-then-MAC mode.
+    expected_miss_reason: pipeline_gap
     prior_detectability: {sast: "no", secrets: "no", sca: "no"}
     context:
       exposure: internal
       attacker_input: "no"
+      reachability: not verified
       notes: >-
         A real SCA coverage gap: core/scanners/pip_audit.py only reads *requirements*.txt, so this manifest
         is never audited. Predicted miss, attributable to the adapter rather than to pip-audit itself.
@@ -702,7 +829,7 @@ cases:
 
   - id: P39
     target: ops_toolbox
-    kind: positive
+    kind: unscored
     title: Unpinned PyYAML>=5.1 admits a vulnerable range and stays unaudited
     file: requirements.txt
     line_start: 4
@@ -710,8 +837,12 @@ cases:
     anchor: PyYAML>=5.1
     cwe: CWE-1104
     unpinned: true
-    match:
-      - {file: requirements.txt, line_start: 4, line_end: 4, cwe: [CWE-1104], classes: ["vuln:*"]}
+    unscored_reason: >-
+      An unpinned requirement is a risk, not a demonstrated vulnerability: a fresh install resolves to a current,
+      unaffected PyYAML, so neither a positive nor a negative label is correct.
+    pipeline_expectation: >-
+      The pipeline must list the requirement as unresolved in the manifest (the `unresolved` list of the pip-audit
+      entry, with PyYAML>=5.1 and reason unpinned). No finding is expected from it.
     advisories:
       - id: GHSA-8q59-q68h-6hv4
         aliases: [CVE-2020-14343, PYSEC-2021-142]
@@ -726,14 +857,14 @@ cases:
     context:
       exposure: internal
       attacker_input: "no"
+      reachability: not verified
       notes: >-
         Exists to test the coverage record: the expected trace is an `unresolved` entry, not a finding. The
-        code only calls yaml.safe_load, which the advisory does not reach.
+        code only calls yaml.safe_load, which the advisory does not reach, and the installed version is unknown.
     confidence_in_label: low
     label_doubt: >-
-      An unpinned requirement is a risk, not a demonstrated vulnerability. A fresh install resolves to a
-      current, unaffected PyYAML, and safe_load is not the affected path. Included because the quota asks for
-      it, but a human may prefer to score it as a coverage item rather than a positive.
+      Moved from positive to unscored by the label review. Kept as a coverage item because the quota asks for an
+      unpinned requirement.
 
   - id: P40
     target: ops_toolbox
@@ -748,7 +879,9 @@ cases:
       - {file: toolbox/legacy_restore.py, line_start: 7, line_end: 7, cwe: [CWE-78]}
     rationale: >-
       Sink: `snapshot_name` is concatenated into an os.system shell string with no quoting. The function would
-      be injectable if anything called it, but no module imports it and it has no console script.
+      be injectable if anything called it, but no module imports it and it has no console script. Exploitability
+      assumptions: a future caller passes an untrusted snapshot name; as shipped, no caller exists, so nothing is
+      exploitable today.
     prior_detectability: {sast: "yes", secrets: "no", sca: "no"}
     context:
       exposure: unreachable
@@ -941,8 +1074,9 @@ cases:
     anchor: autoescape=select_autoescape(["html"])
     cwe: CWE-79
     rationale: >-
-      The template name is the constant audit.html, whose extension turns autoescape on, and audit.html only
-      uses {{ note }} with no safe filter. User input is template data, never template source. Compare P25.
+      Line 53 sets autoescape=select_autoescape(["html"]), and line 61 loads the constant name audit.html, so that
+      extension turns autoescape on. audit.html line 4 outputs {{ note }} with no safe filter. Line 61 passes the
+      input through render(note=note) as template data, never as template source. Compare P25.
     prior_detectability: {sast: "no", secrets: "no", sca: "no"}
     context:
       exposure: authenticated
@@ -960,8 +1094,9 @@ cases:
     anchor: candidate.is_relative_to(root)
     cwe: CWE-22
     rationale: >-
-      `resolve()` removes `..` and follows symlinks before the containment check, and an absolute name resolves
-      outside the root and fails it. Only regular files below the root are sent, as a download.
+      Line 32 runs `resolve()`, which removes `..` and follows symlinks, and an absolute name resolves outside the
+      root. Line 33 enforces containment with `candidate.is_relative_to(root)` and requires a regular file, and line
+      34 aborts with 404 otherwise, so line 35 only ever sends regular files below the root.
     prior_detectability: {sast: "maybe", secrets: "no", sca: "no"}
     context:
       exposure: authenticated
@@ -1037,37 +1172,49 @@ cases:
     anchor: ast.literal_eval(raw)
     cwe: CWE-95
     rationale: >-
-      `literal_eval` only builds Python literals and cannot call anything, so it does not execute code. The
-      4096-character cap limits the input; the worst case is an exception that ends this one CLI invocation.
+      `literal_eval` only builds Python literals and cannot call anything: no code execution; DoS risk bounded by
+      the cap. Lines 11-12 reject anything over 4096 characters before line 13 parses it. The CPython docs warn that
+      a relatively small input can still exhaust memory or the C stack and crash the process, so the worst case
+      is losing this one CLI invocation, not an exception alone.
     prior_detectability: {sast: "no", secrets: "no", sca: "no"}
     context:
       exposure: internal
       attacker_input: "yes"
-      notes: Eval-looking name. Malformed input raises and stops the command.
+      notes: Eval-looking name. Malformed input raises and stops the command. A crash affects only this process.
     confidence_in_label: high
 
   - id: N23
     target: ops_toolbox
-    kind: negative
-    title: tarfile extraction with the data filter
+    kind: unscored
+    title: tarfile extraction with the data filter, safety depends on the interpreter and platform
     file: toolbox/archive.py
     line_start: 16
     line_end: 17
     anchor: filter="data"
     cwe: CWE-22
+    unscored_reason: >-
+      No requires-python range makes this safe on every allowed interpreter. P35 needs a version below 3.14, and
+      CVE-2026-107784 (gh-161323), a data-filter bypass on Windows, is fixed in no 3.13 release. requires-python
+      cannot exclude Windows.
+    pipeline_expectation: >-
+      A finding on these lines counts neither as a false alarm nor as a detection. Restore the negative label only
+      after a 3.13 release contains the backport (python/cpython pull request 161357), with the floor raised to it.
     rationale: >-
-      The data filter rejects absolute paths, members outside the destination, links that leave it and special
-      files. pyproject.toml requires Python >=3.13.4, which includes the 2025 filter-bypass fixes such as
-      CVE-2025-4517.
+      Assumption: the code runs on >=3.13.18,<3.14, which has every released data-filter fix (interpreter_evidence
+      at the top of this file). There the filter rejects absolute paths, members outside the destination, links
+      that leave it and special files, except for the drive-relative names of CVE-2026-107784 on Windows.
     prior_detectability: {sast: "maybe", secrets: "no", sca: "no"}
     context:
       exposure: internal
       attacker_input: "no"
-      notes: Same module as P35, differing by the filter argument.
+      notes: >-
+        Same module as P35, differing by the filter argument. Assumes requires-python >=3.13.18,<3.14. On POSIX the
+        floor for the data filter alone is 3.13.16. This filter has had advisories through 2026, so any safety
+        claim here is only as of the check date.
     confidence_in_label: medium
     label_doubt: >-
-      Safety depends on the interpreter, so the requires-python line carries part of the argument. I recalled
-      the fixed version from memory and did not check it against a Python advisory in this phase.
+      Moved from negative to unscored by the label review. The earlier floor of 3.13.4 came from memory and missed
+      the 2026 data-filter advisories.
 
   - id: N24
     target: ops_toolbox
@@ -1114,12 +1261,13 @@ cases:
     file: toolbox/report.py
     line_start: 26
     line_end: 31
-    anchor: 'f"SELECT name, total FROM {table}"'
+    anchor: 'f"SELECT name, total FROM {table} WHERE total >= ?"'
     cwe: CWE-89
     rationale: >-
-      Truly unexploitable look-alike: `table` can only be a value of the module's constant mapping. Any other
-      `kind` raises KeyError on the line above the query, before any SQL exists, so no input reaches the string.
-      tests/test_report.py states this property.
+      Truly unexploitable look-alike. Line 26 defines the closed allow-list `_REPORT_TABLES`. Line 30 looks `kind` up
+      in it, and any other value raises KeyError before any SQL exists, so `table` is always one of its constants.
+      Line 31 has the only other value, `min_total`, bound separately through the `?` placeholder and the parameter
+      tuple. No input reaches the SQL text. tests/test_report.py states the allow-list property.
     prior_detectability: {sast: "yes", secrets: "no", sca: "no"}
     context:
       exposure: internal

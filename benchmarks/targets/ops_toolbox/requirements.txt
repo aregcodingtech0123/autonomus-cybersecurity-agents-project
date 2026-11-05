@@ -1,0 +1,4 @@
+# Runtime dependencies for the ops toolbox scripts.
+requests==2.33.1
+click==8.1.8
+PyYAML>=5.1

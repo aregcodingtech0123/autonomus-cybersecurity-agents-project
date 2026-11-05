@@ -1,0 +1,11 @@
+[project]
+name = "ops-toolbox"
+version = "1.8.2"
+description = "Operations scripts: backups, bundles, reports."
+requires-python = ">=3.13.4,<3.14"
+dependencies = [
+    "paramiko==2.10.0",
+]
+
+[project.scripts]
+toolbox = "toolbox.cli:cli"

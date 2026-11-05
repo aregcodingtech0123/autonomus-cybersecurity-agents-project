@@ -212,6 +212,9 @@ def evaluate(
                     "findings": [f.id for f in supporting],
                 }
             )
+        elif case.kind == "unscored":
+            # Excluded from every metric: no row, and its findings are not reported as unlabeled.
+            labeled.update(f.id for f in overlapping)
         else:
             tools = sorted({t for f in overlapping for t in f.tools})
             labeled.update(f.id for f in overlapping)

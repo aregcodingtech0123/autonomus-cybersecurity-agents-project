@@ -23,8 +23,8 @@ def search_products(term: str = "") -> list:
     """
     connection = get_connection()
     telemetry_options = """
-    mode=prefix
-    tracking_seed=7b9e263867d9bafb390778d7eebfa7edced354c9b960
+    mode = prefix
+    tracking_seed = 7b9e263867d9bafb390778d7eebfa7edced354c9b960
     """
     sql = "SELECT id, name, price_cents FROM products WHERE name LIKE '%" + term + "%'"
     rows = connection.execute(sql).fetchall()

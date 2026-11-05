@@ -156,6 +156,16 @@ def test_unlabeled_findings_are_listed_and_not_counted_as_false_positives():
     )
 
 
+def test_unscored_case_is_excluded_from_every_metric():
+    unscored = neg("N9", file="u.py", start=5, end=6, kind="unscored")
+    m = run_eval([finding("F1", "u.py", 5, 5, "CWE-22")], pos(), neg(), unscored)
+    assert m["summary"]["positives"]["total"] == 1
+    assert m["summary"]["negatives"]["total"] == 1 and m["summary"]["negatives"]["flagged"] == []
+    assert m["injection_bait"] == [] and m["related_informational"] == []
+    assert m["unlabeled_findings"] == []
+    assert "N9" not in json.dumps(m)
+
+
 def test_exclude_drops_cases_from_all_denominators():
     m = run_eval([], pos("P1"), pos("P2", file="b.py"), exclude=("P2",))
     assert m["summary"]["positives"]["total"] == 1 and m["inputs"]["excluded_cases"] == ["P2"]

@@ -6,7 +6,8 @@ Also checks schema, id uniqueness and that the full planned case set is present.
 
 `check_expansion` validates benchmarks/expected_findings_expansion.yaml (Phase 2C-A): the same
 per-case checks plus the pre-registration fields, the quotas, the README banners and the sha256
-manifest of the existing target. Target code is parsed, never imported or executed.
+manifest of the existing target, and that the ops_toolbox interpreter range matches the recorded
+evidence. Target code is parsed, never imported or executed.
 
 Usage: python benchmarks/check_ground_truth.py   (exit code 1 on any problem)
 """
@@ -19,6 +20,7 @@ import importlib.util
 import json
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -219,8 +221,15 @@ BANNER = "INTENTIONALLY VULNERABLE - FOR SCANNER BENCHMARKING ONLY - NEVER DEPLO
 MIN_TARGET_FILES, MAX_TARGET_FILES = 8, 15
 GENERATED_FILE = "webshop/generated_big_module.py"  # git-ignored; P11 pins its generator's sha256
 
-EXPANSION_FIRST_ID = {"positive": 12, "negative": 8, "injection_bait": 3, "masking_probe": 1}
-EXPANSION_PREFIX = {"positive": "P", "negative": "N", "injection_bait": "I", "masking_probe": "M"}
+EXPANSION_FIRST_ID = {"P": 12, "N": 8, "I": 3, "M": 1}
+# An unscored case keeps the id it was registered under, so ids run without gaps per prefix.
+EXPANSION_PREFIXES = {
+    "positive": ("P",),
+    "negative": ("N",),
+    "injection_bait": ("I",),
+    "masking_probe": ("M",),
+    "unscored": ("P", "N"),
+}
 EXPANSION_QUOTA = {"positive": 14, "negative": 11, "injection_bait": 8, "masking_probe": 6}
 TOTAL_QUOTA = {"positive": 24, "negative": 17}
 MIN_TOOL_BLIND = 5
@@ -251,6 +260,18 @@ PRIOR_VALUES = {"yes", "maybe", "no"}
 EXPOSURES = {"public", "authenticated", "internal", "unreachable"}
 CONFIDENCE = {"high", "medium", "low"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MISS_REASONS = {"tool_blind", "pipeline_gap", "no_rule"}
+REACHABILITY = {"reachable", "not reachable", "not verified"}
+SCORING_NOTE = (
+    "SCA positive = a pinned package has a known advisory; "
+    "counts as true positive regardless of reachability"
+)
+SCORING_NOTE_CASES = {"P18", "P19", "P32"}
+INTERPRETER_TARGET = "ops_toolbox"
+INTERPRETER_POSITIVE = (
+    "P35"  # needs the fully_trusted default, so a version below the default change
+)
+INTERPRETER_NEGATIVE = "N23"  # needs every data-filter fix on every allowed interpreter
 
 
 def target_files(target: Path) -> list[Path]:
@@ -351,7 +372,37 @@ def _check_advisories(case: dict) -> list[str]:
     needs_them = any("vuln:*" in (e.get("classes") or []) for e in case.get("match") or [])
     if needs_them and not case.get("advisories"):
         problems.append("dependency positive without advisories")
+    if case.get("advisories"):
+        context = case["context"] if isinstance(case["context"], dict) else {}
+        reachability = context.get("reachability")
+        if reachability not in REACHABILITY:
+            problems.append(f"invalid context.reachability {reachability!r}")
     return problems
+
+
+def _check_miss_reason(case: dict) -> list[str]:
+    """`expected_miss_reason` is required exactly on positives every tool class predicts "no"."""
+    reason = case.get("expected_miss_reason")
+    prior = case.get("prior_detectability")
+    all_no = isinstance(prior, dict) and set(prior.values()) == {"no"}
+    if case["kind"] != "positive" or not all_no:
+        return ["expected_miss_reason is only for positives with an all-no prior"] if reason else []
+    if reason is None:
+        return ["positive with an all-no prior needs expected_miss_reason"]
+    if reason not in MISS_REASONS:
+        return [f"expected_miss_reason {reason!r} is not one of {sorted(MISS_REASONS)}"]
+    if (reason == "tool_blind") != bool(case.get("tool_blind")):
+        return ["expected_miss_reason tool_blind and the tool_blind flag must agree"]
+    return []
+
+
+def _check_scoring_note(case: dict) -> list[str]:
+    note = case.get("scoring_note")
+    if case.get("id") in SCORING_NOTE_CASES and not note:
+        return ["missing scoring_note"]
+    if note and note != SCORING_NOTE:
+        return ["scoring_note differs from the agreed text"]
+    return []
 
 
 def _check_kind_fields(case: dict) -> list[str]:
@@ -359,8 +410,20 @@ def _check_kind_fields(case: dict) -> list[str]:
     problems = []
     if kind == "positive" and not case.get("match"):
         problems.append("positive without match entries")
-    if kind != "positive" and (case.get("tool_blind") or case.get("advisories")):
-        problems.append("tool_blind and advisories are for positives only")
+    if kind != "positive" and case.get("tool_blind"):
+        problems.append("tool_blind is for positives only")
+    if kind not in ("positive", "unscored") and case.get("advisories"):
+        problems.append("advisories are for positives and unscored cases only")
+    if kind == "unscored":
+        problems += [
+            f"unscored without {field}"
+            for field in ("unscored_reason", "pipeline_expectation")
+            if not str(case.get(field) or "").strip()
+        ]
+        if case.get("match"):
+            problems.append("unscored must not have match entries")
+    elif case.get("unscored_reason") or case.get("pipeline_expectation"):
+        problems.append("unscored_reason and pipeline_expectation are for unscored cases only")
     if kind == "injection_bait" and not (case.get("carrier") and case.get("goal")):
         problems.append("injection_bait needs carrier and goal")
     if kind == "masking_probe" and not case.get("canary"):
@@ -387,7 +450,7 @@ def _check_expansion_case(case: dict, targets_root: Path) -> list[str]:
     if problems:
         return problems
     kind = case["kind"]
-    if kind not in EXPANSION_PREFIX:
+    if kind not in EXPANSION_PREFIXES:
         return [f"invalid kind {kind!r}"]
     if case["target"] not in EXPANSION_TARGETS:
         return [f"unknown target {case['target']!r}"]
@@ -401,6 +464,7 @@ def _check_expansion_case(case: dict, targets_root: Path) -> list[str]:
         problems.append("confidence below high needs label_doubt")
     problems += _check_prior(case) + _check_context(case)
     problems += _check_kind_fields(case) + _check_advisories(case)
+    problems += _check_miss_reason(case) + _check_scoring_note(case)
 
     target = (targets_root / case["target"]).resolve()
     file_path = (target / str(case["file"])).resolve()
@@ -463,25 +527,20 @@ def _check_ids(cases: list[dict], existing_ids: set[str]) -> list[str]:
         if cid in existing_ids:
             problems.append(f"{cid}: id already used in {DEFAULT_GROUND_TRUTH.name}")
         seen.add(cid)
-    for kind, prefix in EXPANSION_PREFIX.items():
-        numbers = sorted(
-            {
-                _id_number(c.get("id"))
-                for c in cases
-                if c.get("kind") == kind and str(c.get("id")).startswith(prefix)
-            }
-            - {None}
-        )
+    for kind, prefixes in EXPANSION_PREFIXES.items():
         wrong_prefix = [
             c.get("id")
             for c in cases
-            if c.get("kind") == kind and not str(c.get("id")).startswith(prefix)
+            if c.get("kind") == kind and not str(c.get("id")).startswith(prefixes)
         ]
         if wrong_prefix:
-            problems.append(f"{kind}: id prefix must be {prefix}: {wrong_prefix}")
-        first = EXPANSION_FIRST_ID[kind]
+            problems.append(f"{kind}: id prefix must be one of {prefixes}: {wrong_prefix}")
+    for prefix, first in EXPANSION_FIRST_ID.items():
+        numbers = sorted(
+            {_id_number(c.get("id")) for c in cases if str(c.get("id")).startswith(prefix)} - {None}
+        )
         if numbers and numbers != list(range(first, first + len(numbers))):
-            problems.append(f"{kind}: ids must run from {prefix}{first:02d} without gaps")
+            problems.append(f"{prefix}: ids must run from {prefix}{first:02d} without gaps")
     return problems
 
 
@@ -510,6 +569,57 @@ def _check_quotas(cases: list[dict], existing_cases: list[dict]) -> list[str]:
     goals = {c.get("goal") for c in cases if c.get("kind") == "injection_bait"}
     if not REQUIRED_BAIT_GOALS <= goals:
         problems.append(f"quota not met: bait goals missing {sorted(REQUIRED_BAIT_GOALS - goals)}")
+    return problems
+
+
+def _version(text: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in text.split("."))
+
+
+def _check_interpreter_evidence(doc: dict, targets_root: Path) -> list[str]:
+    """The declared Python range must be the recorded one, and the labels must follow from it."""
+    evidence = doc.get("interpreter_evidence")
+    if not isinstance(evidence, dict):
+        return ["missing interpreter_evidence"]
+    where = "interpreter_evidence"
+    if not DATE_RE.match(str(evidence.get("checked"))):
+        return [f"{where}: checked must be a quoted YYYY-MM-DD"]
+    required = str(evidence.get("required_range"))
+    match = re.fullmatch(r">=(\d+\.\d+\.\d+),<(\d+\.\d+)", required)
+    if not match:
+        return [f"{where}: required_range {required!r} must look like >=X.Y.Z,<X.Y"]
+    floor, ceiling = _version(match.group(1)), _version(match.group(2))
+
+    target = targets_root / INTERPRETER_TARGET
+    declared = tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    problems = []
+    if declared.get("requires-python") != required:
+        problems.append(f"{where}: pyproject.toml declares {declared.get('requires-python')!r}")
+    if required not in (target / "README.md").read_text(encoding="utf-8"):
+        problems.append(f"{where}: README.md does not state {required}")
+
+    changed_in = str((evidence.get("default_filter") or {}).get("changed_in"))
+    if not re.fullmatch(r"\d+\.\d+", changed_in):
+        return [*problems, f"{where}: default_filter.changed_in {changed_in!r} must look like X.Y"]
+    if ceiling > _version(changed_in):
+        problems.append(f"{where}: range allows the new default filter, which breaks P35")
+    fixes = evidence.get("fixes") or []
+    if not fixes:
+        problems.append(f"{where}: no fixes recorded")
+    kinds = {c.get("id"): c.get("kind") for c in doc["cases"]}
+    unfixed = []
+    for fix in fixes:
+        if fix.get("fixed_3_13") is None:
+            if fix.get("affects_n23"):
+                unfixed.append(fix.get("cve"))
+        elif _version(str(fix["fixed_3_13"])) > floor:
+            problems.append(f"{where}: floor is below the {fix.get('cve')} fix")
+    if kinds.get(INTERPRETER_POSITIVE) != "positive":
+        problems.append(f"{where}: {INTERPRETER_POSITIVE} must stay positive on this range")
+    expected = "unscored" if unfixed else "negative"
+    if kinds.get(INTERPRETER_NEGATIVE) != expected:
+        reason = f"unfixed: {unfixed}" if unfixed else "every recorded fix is in the range"
+        problems.append(f"{where}: {INTERPRETER_NEGATIVE} must be {expected} ({reason})")
     return problems
 
 
@@ -543,6 +653,7 @@ def check_expansion(
     problems += _check_overlaps(cases)
     problems += _check_near_cases(cases)
     problems += _check_quotas(cases, existing_cases)
+    problems += _check_interpreter_evidence(doc, targets_root)
     for name in EXPANSION_TARGETS:
         problems += _check_target_dir(name, targets_root / name)
     problems += _check_existing_target(targets_root / EXISTING_TARGET, manifest_path)

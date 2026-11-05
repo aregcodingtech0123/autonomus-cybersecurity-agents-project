@@ -43,6 +43,12 @@ def test_catalogue_lists_every_case_and_no_canary(generator, doc):
             assert case["canary"] not in text
 
 
+def test_catalogue_marks_the_unscored_cases(generator):
+    text = generator.generate()
+    assert "| P39 | unscored |" in text
+    assert "| N23 | unscored |" in text
+
+
 def test_catalogue_output_does_not_depend_on_case_order(generator, doc):
     copy = json.loads(json.dumps(doc))
     copy["cases"].reverse()
